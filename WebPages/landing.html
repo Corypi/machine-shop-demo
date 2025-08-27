@@ -4,30 +4,113 @@
   <meta charset="UTF-8">
   <title>Machine Shop Demo</title>
   <link rel="stylesheet" href="../Styles/main.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Page-scoped styles for the intro drawer; move to main.css later if you like -->
+  <style>
+    .IntroVideo {
+      width: 100%;
+      height: auto;
+      max-height: 70vh;
+      display: block;
+      border-radius: 8px;
+      background: #000;
+      object-fit: cover;
+    }
+    .SkipButton {
+      position: relative;
+      display: inline-block;
+      margin-top: 0.5rem;
+      margin-left: auto;
+      padding: 0.5rem 0.9rem;
+      font-weight: 700;
+      border: 2px solid #ffffff;
+      border-radius: 6px;
+      color: #ffffff;
+      background: rgba(0,0,0,0.55);
+      cursor: pointer;
+    }
+    .SkipRow {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 0.5rem;
+    }
+  </style>
 </head>
 <body>
 
   <header class="Header">
     <h1 class="HeaderTitle">Welcome to Our Machine Shop</h1>
-    <p class="HeaderSubtitle">High-precision parts, modern capabilities, quick turnaround.</p>
+    <p class="HeaderSubtitle">High-precision parts, modern capabilities.</p>
   </header>
 
-  <main class="Container">
-    <h2 class="SectionTitle">What We Do</h2>
+  <main class="Container" id="Top">
+    <h2 class="SectionTitle">Explore</h2>
 
-    <section class="Drawer Drawer--Open" data-drawer>
+    <!-- Drawer 1: Intro video (OPEN by default) -->
+    <section class="Drawer Drawer--Open" id="Intro" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">
+        Intro
+        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
+        </svg>
+      </h3>
+      <div class="DrawerContent" data-drawer-content>
+        <video
+          class="IntroVideo"
+          src="../Assets/movie_001.mp4"
+          autoplay
+          muted
+          playsinline
+          controls
+          onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+        </video>
+
+        <div class="SkipRow">
+          <button class="SkipButton"
+                  onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+            Skip Intro
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Drawer 2: About Us -->
+    <section class="Drawer" id="About" data-drawer>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
         About Us
         <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M7 10l5 5 5-5" fill="currentColor"></path>
         </svg>
       </h3>
       <div class="DrawerContent" data-drawer-content>
-        <p>This is a placeholder for your first drawer of content.</p>
+        <p>We machine complex parts with tight tolerances and consistent turnaround.</p>
+        <p>ISO-style processes, modern CAM, and a quality-first culture.</p>
       </div>
     </section>
 
-    <section class="Drawer" data-drawer>
+    <!-- Drawer 3: Shop Tour (second video) -->
+    <section class="Drawer" id="Tour" data-drawer>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
+        Shop Tour
+        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
+        </svg>
+      </h3>
+      <div class="DrawerContent" data-drawer-content>
+        <video class="IntroVideo"
+               src="../Assets/shop_tour.mp4"
+               controls
+               preload="metadata"
+               playsinline>
+        </video>
+        <p>Walkthrough of our machines, inspection, and finishing areas.</p>
+      </div>
+    </section>
+
+    <!-- Drawer 4: Capabilities -->
+    <section class="Drawer" id="Capabilities" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
         Capabilities
         <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
@@ -35,11 +118,17 @@
         </svg>
       </h3>
       <div class="DrawerContent" data-drawer-content>
-        <p>Details about machines, materials, and tolerances...</p>
+        <ul>
+          <li>3-axis & 5-axis milling, CNC turning</li>
+          <li>Materials: 6061/7075, 304/316, 4140, brass, plastics</li>
+          <li>Finishes: anodize II/III, passivate, bead blast</li>
+          <li>Inspection: calibrated metrology, first-article docs</li>
+        </ul>
       </div>
     </section>
 
-    <section class="Drawer" data-drawer>
+    <!-- Drawer 5: Contact -->
+    <section class="Drawer" id="Contact" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
         Contact
         <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
@@ -47,7 +136,8 @@
         </svg>
       </h3>
       <div class="DrawerContent" data-drawer-content>
-        <p>Email, phone, and an RFQ form will go here.</p>
+        <p>Email: <a href="mailto:info@example.com">info@example.com</a></p>
+        <p>Phone: 555-0100</p>
       </div>
     </section>
   </main>
@@ -56,7 +146,33 @@
     <small>© <span id="Year"></span> Acme Precision • Demo</small>
   </footer>
 
-  <script src="../Scripts/Drawers.js"></script>
   <script src="../Scripts/Utilities.js"></script>
+  <script src="../Scripts/Drawers.js"></script>
+
+  <!-- Hook up Skip Intro safely if the controller is available -->
+  <script>
+    (function ()
+    {
+      "use strict";
+      function WireSkipIfReady()
+      {
+        if (window.DrawersController && typeof window.DrawersController.OpenThenCloseAndScroll === "function")
+        {
+          // nothing else needed; buttons already call the public method
+          return;
+        }
+        // Retry shortly if Drawers.js hasn’t finished booting yet
+        setTimeout(WireSkipIfReady, 50);
+      }
+      if (document.readyState === "loading")
+      {
+        document.addEventListener("DOMContentLoaded", WireSkipIfReady);
+      }
+      else
+      {
+        WireSkipIfReady();
+      }
+    })();
+  </script>
 </body>
 </html>
