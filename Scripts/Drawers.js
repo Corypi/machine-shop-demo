@@ -378,7 +378,50 @@
       this.CloseSiblings(bestDrawer);
     }
   };
+  
+  // ---------- Public helpers ----------
 
+  DrawerController.prototype.OpenById = function (id)
+  {
+    var drawer = document.getElementById(id);
+    if (!drawer) { return; }
+    if (!drawer.classList.contains("Drawer--Open"))
+    {
+      this.OpenDrawer(drawer);
+      if (typeof OnlyOneOpenAtATime !== "undefined" && OnlyOneOpenAtATime)
+      {
+        this.CloseSiblings(drawer);
+      }
+    }
+  };
+
+  DrawerController.prototype.CloseById = function (id)
+  {
+    var drawer = document.getElementById(id);
+    if (!drawer) { return; }
+    if (drawer.classList.contains("Drawer--Open"))
+    {
+      this.CloseDrawer(drawer);
+    }
+  };
+
+  DrawerController.prototype.ScrollToDrawer = function (id)
+  {
+    var drawer = document.getElementById(id);
+    if (!drawer) { return; }
+    // Align the drawer title near the top with some offset
+    var title = drawer.querySelector("[data-drawer-summary]") || drawer;
+    var y = title.getBoundingClientRect().top + window.pageYOffset - 16;
+    window.scrollTo({ top: y, behavior: "smooth" });
+  };
+
+  DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId)
+  {
+    this.OpenById(openId);
+    this.CloseById(closeId);
+    this.ScrollToDrawer(openId);
+  };
+  
   // ---------- Internal helpers ----------
 
   DrawerController.prototype._FindAncestorDrawer = function (node)
@@ -396,10 +439,12 @@
 
   // ---------- Boot ----------
 
-  function InitializeDrawersWhenReady()
+    function InitializeDrawersWhenReady()
   {
     var root = document;
-    new DrawerController(root);
+    var instance = new DrawerController(root);
+    // Expose globally for simple onended/onclick handlers
+    window.DrawersController = instance;
   }
 
   if (document.readyState === "loading")
