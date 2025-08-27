@@ -6,28 +6,57 @@
   <link rel="stylesheet" href="../Styles/main.css">
 </head>
 <body>
-  <header>
-    <h1>Welcome to Our Machine Shop</h1>
-    <p>High-precision parts, modern capabilities.</p>
+
+  <header class="Header">
+    <h1 class="HeaderTitle">Welcome to Our Machine Shop</h1>
+    <p class="HeaderSubtitle">High-precision parts, modern capabilities, quick turnaround.</p>
   </header>
 
-  <main>
-    <section class="drawer open">
-      <h2>About Us</h2>
-      <p>This is a placeholder for your first drawer of content.</p>
+  <main class="Container">
+    <h2 class="SectionTitle">What We Do</h2>
+
+    <section class="Drawer Drawer--Open" data-drawer>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">
+        About Us
+        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
+        </svg>
+      </h3>
+      <div class="DrawerContent" data-drawer-content>
+        <p>This is a placeholder for your first drawer of content.</p>
+      </div>
     </section>
 
-    <section class="drawer">
-      <h2>Capabilities</h2>
-      <p>Details about machines, materials, tolerances...</p>
+    <section class="Drawer" data-drawer>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
+        Capabilities
+        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
+        </svg>
+      </h3>
+      <div class="DrawerContent" data-drawer-content>
+        <p>Details about machines, materials, and tolerances...</p>
+      </div>
     </section>
 
-    <section class="drawer">
-      <h2>Contact</h2>
-      <p>Email, phone, RFQ form goes here.</p>
+    <section class="Drawer" data-drawer>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
+        Contact
+        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
+        </svg>
+      </h3>
+      <div class="DrawerContent" data-drawer-content>
+        <p>Email, phone, and an RFQ form will go here.</p>
+      </div>
     </section>
   </main>
 
-  <script src="../Scripts/drawers.js"></script>
+  <footer class="Footer">
+    <small>© <span id="Year"></span> Acme Precision • Demo</small>
+  </footer>
+
+  <script src="../Scripts/Drawers.js"></script>
+  <script src="../Scripts/Utilities.js"></script>
 </body>
 </html>

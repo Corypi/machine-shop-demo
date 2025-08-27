@@ -1,33 +1,139 @@
-body {
-  margin: 0;
-  font-family: sans-serif;
-  background: #f7f7f7;
-  color: #222;
+:root
+{
+  /* Color palette */
+  --ColorBackground: #0b0d10;
+  --ColorForeground: #e9edf1;
+  --ColorMuted: #9aa6b2;
+  --ColorCard: #12161b;
+  --ColorAccent: #48b0ff;
+
+  /* Layout constants */
+  --MaxWidth: 1100px;
+  --Radius: 12px;
+  --Gap: 12px;
+
+  /* Drawer behavior (no “magic numbers”) */
+  --DrawerCollapsedHeight: 2.75rem;   /* header height when collapsed */
+  --DrawerExpandedMaxHeight: 500px;   /* visual max when open (non-animated) */
+  --DrawerBorder: #222a33;
 }
 
-header {
-  background: #333;
-  color: #fff;
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body
+{
+  margin: 0;
+  color: var(--ColorForeground);
+  background: var(--ColorBackground);
+  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.Header
+{
+  background: #1a2027;
+  color: #ffffff;
   padding: 1rem;
   text-align: center;
+  border-bottom: 1px solid #0e141a;
 }
 
-.drawer {
-  background: #fff;
-  border: 1px solid #ddd;
-  margin: 0.5rem auto;
-  max-width: 800px;
-  padding: 1rem;
-  cursor: pointer;
-  transition: max-height 0.3s ease, padding 0.3s ease;
-  overflow: hidden;
-  max-height: 2.5rem; /* collapsed height */
-}
-
-.drawer h2 {
+.HeaderTitle
+{
   margin: 0;
+  font-size: clamp(1.5rem, 3.2vw, 2.4rem);
 }
 
-.drawer.open {
-  max-height: 500px; /* expand enough for content */
+.HeaderSubtitle
+{
+  margin: 0.25rem 0 0;
+  color: #cfd8e3;
+}
+
+.Container
+{
+  max-width: var(--MaxWidth);
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.SectionTitle
+{
+  margin: 0 0 0.75rem 0;
+  font-size: 1.25rem;
+  color: var(--ColorMuted);
+}
+
+/* Drawer */
+.Drawer
+{
+  background: var(--ColorCard);
+  border: 1px solid var(--DrawerBorder);
+  border-radius: var(--Radius);
+  overflow: hidden;
+  margin-top: var(--Gap);
+}
+
+.Drawer:first-of-type
+{
+  margin-top: 0;
+}
+
+.DrawerTitle
+{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  margin: 0;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  min-height: var(--DrawerCollapsedHeight);
+}
+
+.DrawerTitle:focus
+{
+  outline: none;
+}
+
+.DrawerTitle:focus-visible
+{
+  outline: 2px solid var(--ColorAccent);
+  outline-offset: 4px;
+}
+
+/* Caret rotation */
+.Caret
+{
+  width: 1.25rem;
+  height: 1.25rem;
+  transition: transform 0.25s ease;
+}
+
+.Drawer--Open .Caret
+{
+  transform: rotate(180deg);
+}
+
+/* Content */
+.DrawerContent
+{
+  padding: 0.25rem 1.125rem 1rem 1.125rem;
+  display: grid;
+  gap: 0.75rem;
+  color: #cdd6df;
+
+  /* Collapsed by default when JS applies inline styles for animation; 
+     these values are used when JS is not active. */
+  max-height: var(--DrawerExpandedMaxHeight);
+}
+
+.Footer
+{
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--ColorMuted);
+  border-top: 1px solid #11161b;
 }
