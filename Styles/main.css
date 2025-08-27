@@ -16,6 +16,10 @@
   --DrawerCollapsedHeight: 2.75rem;   /* header height when collapsed */
   --DrawerExpandedMaxHeight: 500px;   /* visual max when open (non-animated) */
   --DrawerBorder: #222a33;
+
+  /* Animation & rendering hints */
+  --AnimationDurationMs: 220ms;
+  --DrawerIntrinsicSize: 420px;       /* approximate content height for c-v */
 }
 
 * { box-sizing: border-box; }
@@ -70,8 +74,9 @@ body
   background: var(--ColorCard);
   border: 1px solid var(--DrawerBorder);
   border-radius: var(--Radius);
-  overflow: hidden;
+  overflow: hidden;          /* keep borders tidy during height anims */
   margin-top: var(--Gap);
+  contain: paint;            /* isolate repaints for smoother anims */
 }
 
 .Drawer:first-of-type
@@ -109,7 +114,7 @@ body
 {
   width: 1.25rem;
   height: 1.25rem;
-  transition: transform 0.25s ease;
+  transition: transform var(--AnimationDurationMs) ease;
 }
 
 .Drawer--Open .Caret
@@ -125,9 +130,27 @@ body
   gap: 0.75rem;
   color: #cdd6df;
 
-  /* Collapsed by default when JS applies inline styles for animation; 
-     these values are used when JS is not active. */
+  /* Collapsed-by-default fallback when JS is off */
   max-height: var(--DrawerExpandedMaxHeight);
+
+  /* Performance hints */
+  content-visibility: auto;                 /* skip rendering off-screen */
+  contain-intrinsic-size: var(--DrawerIntrinsicSize);
+  overflow: clip;                            /* hide during height anim */
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce)
+{
+  .Caret
+  {
+    transition: none !important;
+  }
+
+  .DrawerContent
+  {
+    transition: none !important;
+  }
 }
 
 .Footer
