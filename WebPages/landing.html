@@ -8,6 +8,18 @@
 </head>
 <body>
 
+  <!-- Toolbar / Dock -->
+  <button class="ToolbarHandle" id="ToolbarHandle" aria-label="Toggle controls" aria-expanded="true" title="Hide controls">▴</button>
+  <div class="Toolbar" id="Toolbar">
+    <button class="ToolbarButton" data-nav-target="Intro">Intro</button>
+    <button class="ToolbarButton" data-nav-target="About">About</button>
+    <button class="ToolbarButton" data-nav-target="Tour">Tour</button>
+    <button class="ToolbarButton" data-nav-target="Capabilities">Capabilities</button>
+    <button class="ToolbarButton" data-nav-target="Contact">Contact</button>
+    <span class="ToolbarSpacer"></span>
+  </div>
+  <div class="ToolbarPadder" aria-hidden="true"></div>
+
   <header class="Header">
     <h1 class="HeaderTitle">Welcome to Our Machine Shop</h1>
     <p class="HeaderSubtitle">High-precision parts, modern capabilities.</p>
@@ -18,12 +30,7 @@
 
     <!-- Drawer 1: Intro video (OPEN by default) -->
     <section class="Drawer Drawer--Open" id="Intro" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">
-        Intro
-        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
-        </svg>
-      </h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">Intro</h3>
       <div class="DrawerContent" data-drawer-content>
         <video
           class="IntroVideo"
@@ -46,48 +53,28 @@
 
     <!-- Drawer 2: About Us -->
     <section class="Drawer" id="About" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
-        About Us
-        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
-        </svg>
-      </h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">About Us</h3>
       <div class="DrawerContent" data-drawer-content>
         <p>We machine complex parts with tight tolerances and consistent turnaround.</p>
         <p>ISO-style processes, modern CAM, and a quality-first culture.</p>
       </div>
     </section>
 
-    <!-- Drawer 3: Shop Tour (second video) -->
+    <!-- Drawer 3: Shop Tour -->
     <section class="Drawer" id="Tour" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
-        Shop Tour
-        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
-        </svg>
-      </h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Shop Tour</h3>
       <div class="DrawerContent" data-drawer-content>
-        <video class="IntroVideo"
-               src="../Assets/shop_tour.mp4"
-               controls
-               preload="metadata"
-               playsinline>
-        </video>
+        <video class="IntroVideo" src="../Assets/shop_tour.mp4" controls preload="metadata" playsinline></video>
         <p>Walkthrough of our machines, inspection, and finishing areas.</p>
       </div>
     </section>
 
     <!-- Drawer 4: Capabilities -->
     <section class="Drawer" id="Capabilities" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
-        Capabilities
-        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
-        </svg>
-      </h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Capabilities</h3>
       <div class="DrawerContent" data-drawer-content>
         <ul>
-          <li>3-axis & 5-axis milling, CNC turning</li>
+          <li>3-axis &amp; 5-axis milling, CNC turning</li>
           <li>Materials: 6061/7075, 304/316, 4140, brass, plastics</li>
           <li>Finishes: anodize II/III, passivate, bead blast</li>
           <li>Inspection: calibrated metrology, first-article docs</li>
@@ -97,12 +84,7 @@
 
     <!-- Drawer 5: Contact -->
     <section class="Drawer" id="Contact" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">
-        Contact
-        <svg class="Caret" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M7 10l5 5 5-5" fill="currentColor"></path>
-        </svg>
-      </h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Contact</h3>
       <div class="DrawerContent" data-drawer-content>
         <p>Email: <a href="mailto:info@example.com">info@example.com</a></p>
         <p>Phone: 555-0100</p>
@@ -116,31 +98,6 @@
 
   <script src="../Scripts/Utilities.js"></script>
   <script src="../Scripts/Drawers.js"></script>
-
-  <!-- Hook up Skip Intro safely if the controller is available -->
-  <script>
-    (function ()
-    {
-      "use strict";
-      function WireSkipIfReady()
-      {
-        if (window.DrawersController && typeof window.DrawersController.OpenThenCloseAndScroll === "function")
-        {
-          // nothing else needed; buttons already call the public method
-          return;
-        }
-        // Retry shortly if Drawers.js hasn’t finished booting yet
-        setTimeout(WireSkipIfReady, 50);
-      }
-      if (document.readyState === "loading")
-      {
-        document.addEventListener("DOMContentLoaded", WireSkipIfReady);
-      }
-      else
-      {
-        WireSkipIfReady();
-      }
-    })();
-  </script>
+  <script src="../Scripts/Toolbar.js"></script>
 </body>
 </html>
