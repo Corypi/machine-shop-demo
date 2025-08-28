@@ -207,6 +207,44 @@ body{
 }
 
 /*==========================================================
+  Video: fixed-height, width-overflow to preserve aspect
+==========================================================*/
+
+/* Generic fixed-height frame (hides horizontal overflow) */
+.VideoFrame{
+  position: relative;
+  overflow: hidden;   /* clip side overflow */
+  background: #000;   /* no flash behind video */
+}
+
+/* Full-viewport hero height */
+.VideoFrame--Hero{
+  height: 100svh;   /* mobile-safe */
+  height: 100vh;    /* fallback */
+}
+
+/* Short hero height */
+.VideoFrame--Short{
+  height: 70svh;
+  height: 70vh;
+}
+
+/* The video fills height; width is auto (may overflow) */
+.VideoFixed{
+  display: block;
+  height: 100%;
+  width: auto;         /* keep aspect ratio */
+  margin: 0 auto;      /* center the overflowing width */
+  /* No object-fit needed; we’re driving size via height */
+}
+
+/* If you ever want slightly shorter on small phones */
+@media (max-width: 420px){
+  .VideoFrame--Hero{  height: 92svh; height: 92vh; }
+  .VideoFrame--Short{ height: 60svh; height: 60vh; }
+}
+
+/*==========================================================
   Intro Video (base) + Skip Button
 ==========================================================*/
 .IntroVideo{
