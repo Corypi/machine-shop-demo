@@ -15,12 +15,20 @@
   --Gap:      12px;
 
   /* Drawer behavior */
-  --DrawerCollapsedHeight: 2.75rem;  /* header height when collapsed */
-  --DrawerExpandedMaxHeight: 500px;  /* non-animated fallback max */
+  --DrawerCollapsedHeight:   2.75rem;  /* header height when collapsed */
+  --DrawerExpandedMaxHeight: 500px;    /* non-animated fallback max */
 
   /* Animation & perf */
   --AnimationDurationMs: 220ms;
-  --DrawerIntrinsicSize: 420px;      /* content-visibility size hint */
+  --DrawerIntrinsicSize: 420px;        /* content-visibility size hint */
+
+  /* Drawer color system (HSL base + per-drawer stepping) */
+  --DrawerHueBase:   210;   /* base hue to harmonize with bg */
+  --DrawerHueStep:     2;   /* hue shift per drawer (degrees) */
+  --DrawerSatBase:    18%;  /* base saturation */
+  --DrawerSatStep:     0%;  /* saturation change per drawer */
+  --DrawerLightBase:   7%;  /* top drawer lightness */
+  --DrawerLightStep:  3.5%; /* lightness increase per drawer */
 }
 
 /*==========================================================
@@ -57,7 +65,7 @@ body{
 }
 
 /*==========================================================
-  Container (centered content; full-bleed sections can escape)
+  Container (centered content; full-bleed drawers escape)
 ==========================================================*/
 .Container{
   max-width: var(--MaxWidth);
@@ -74,6 +82,7 @@ body{
   Drawers (full-bleed by default)
   - Titles are visually hidden (still accessible)
   - Content uses content-visibility for perf
+  - Each drawer lightens & hue-shifts progressively
 ==========================================================*/
 
 /* Each drawer spans the viewport (breaks out of the centered container) */
@@ -83,17 +92,44 @@ body{
   transform: translateX(-50%);
   max-width: none;
 
-  /* No “card chrome”; treat drawers like full-width sections */
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  margin-top: 0;
-  contain: paint;                 /* isolate repaints */
+  /* progressive HSL gradient background */
+  --_step: 0; /* overridden per drawer with :nth-of-type below */
+  --_h:  calc(var(--DrawerHueBase)   + var(--DrawerHueStep)   * var(--_step));
+  --_s:  calc(var(--DrawerSatBase)   + var(--DrawerSatStep)   * var(--_step));
+  --_l0: calc(var(--DrawerLightBase) + var(--DrawerLightStep) * var(--_step));       /* top */
+  --_l1: calc(var(--DrawerLightBase) + var(--DrawerLightStep) * var(--_step) + 2%);  /* bottom */
+
+  background: linear-gradient(
+    180deg,
+    hsl(var(--_h), var(--_s), var(--_l0)) 0%,
+    hsl(var(--_h), var(--_s), var(--_l1)) 100%
+  );
+
+  /* rounded bottom corners (stacked section look) */
+  border-radius: 0 0 16px 16px;
+
+  /* subtle seam on top to separate drawers */
+  border-top: 1px solid rgba(255,255,255,0.06);
+
+  /* clip children (e.g., videos) to rounded corners */
+  overflow: hidden;
+
+  /* perf */
+  contain: paint;
 }
 
+/* spacing between sections */
 .Drawer + .Drawer{
-  margin-top: 24px;               /* breathing room between sections */
+  margin-top: 24px;
 }
+
+/* progressive lighten + hue shift by order */
+.Container > [data-drawer]:nth-of-type(1){ --_step: 0; }
+.Container > [data-drawer]:nth-of-type(2){ --_step: 1; }
+.Container > [data-drawer]:nth-of-type(3){ --_step: 2; }
+.Container > [data-drawer]:nth-of-type(4){ --_step: 3; }
+.Container > [data-drawer]:nth-of-type(5){ --_step: 4; }
+/* add lines as you add more drawers */
 
 /* Visually hidden, screen-reader accessible heading */
 .DrawerTitle{
@@ -111,13 +147,13 @@ body{
   gap: 0.75rem;
   color: #cdd6df;
 
-  /* Fallback max when JS is off */
+  /* fallback when JS is off */
   max-height: var(--DrawerExpandedMaxHeight);
 
-  /* Performance hints */
-  content-visibility: auto;                 /* skip off-screen work */
+  /* performance hints */
+  content-visibility: auto;
   contain-intrinsic-size: var(--DrawerIntrinsicSize);
-  overflow: clip;                            /* tidy height anims */
+  overflow: clip;
 }
 
 /* Flush modifier: remove padding (ideal for hero media) */
@@ -131,7 +167,7 @@ body{
   display: block;
   width: 100vw;
   max-width: none;
-  border-radius: 0;
+  border-radius: 0; /* parent drawer already clips */
 }
 
 /* (Kept for future: caret rotation if titles become visible again) */
