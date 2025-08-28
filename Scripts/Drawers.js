@@ -13,9 +13,9 @@
   var PauseAutoOpenWhileScrolling = true;
   var ScrollIdleMs = 120;
 
-  // NEW: anti-flap controls
-  var SuppressMsAfterProgrammaticClose = 700; // time window where a just-closed drawer won't re-open
-  var HysteresisPx = 64; // when near the anchor, prefer the drawer in the direction of travel by this bias
+  // Anti-flap controls
+  var SuppressMsAfterProgrammaticClose = 700; // just-closed shouldn't re-open
+  var CenterDeadbandPx = 24;                  // small buffer around the center
 
   // ============================================
 
@@ -33,8 +33,6 @@
     this._scrollIdleTimerId = null;
     this._isScrollIdle = true;
 
-    // Scroll direction + suppression
-    this._lastScrollY = window.pageYOffset || 0;
     this._now = function () { return (window.performance && performance.now) ? performance.now() : Date.now(); };
 
     this.Initialize();
@@ -49,7 +47,7 @@
       this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
     }
 
-    // Ensure only Intro is open by default (leave any .Drawer--Open in HTML alone)
+    // Ensure only #Intro is open at boot (leave it open if present)
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       if (d.id !== "Intro") d.classList.remove("Drawer--Open");
@@ -58,9 +56,7 @@
     this.SyncAria();
     this.SyncHeights();
 
-    if (AutoOpenOnScroll) {
-      this.EnableScrollAutoToggle();
-    }
+    if (AutoOpenOnScroll) this.EnableScrollAutoToggle();
   };
 
   // ---------- Interaction ----------
@@ -82,7 +78,7 @@
 
     var isOpen = drawer.classList.contains("Drawer--Open");
     if (isOpen) {
-      this.CloseAndLock(drawer); // user-triggered close: lock briefly to avoid re-open flap
+      this.CloseAndLock(drawer);
     } else {
       this.OpenDrawer(drawer);
       if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
@@ -113,21 +109,16 @@
     drawer.classList.remove("Drawer--Open");
     this.SetAriaExpanded(drawer, false);
 
-    // Pause/rewind any videos inside this drawer
+    // Pause/rewind any videos in this drawer
     var vids = drawer.querySelectorAll("video");
     for (var i = 0; i < vids.length; i++) {
-      try {
-        vids[i].pause();
-        // If you prefer not to rewind, remove the next line
-        vids[i].currentTime = 0;
-      } catch (e) {}
+      try { vids[i].pause(); vids[i].currentTime = 0; } catch (e) {}
     }
 
     var endHeight = 0;
     this.AnimateHeight(content, startHeight, endHeight);
   };
 
-  // Close + lockout to prevent immediate auto-reopen
   DrawerController.prototype.CloseAndLock = function (drawer) {
     this.CloseDrawer(drawer);
     drawer.dataset.lockedUntil = String(this._now() + SuppressMsAfterProgrammaticClose);
@@ -163,11 +154,8 @@
     function OnTransitionEnd(e) {
       if (e.propertyName === "height") {
         element.style.transition = "";
-        if (endHeight === 0) {
-          element.style.height = "";
-        } else {
-          element.style.height = endHeight + "px";
-        }
+        if (endHeight === 0) element.style.height = "";
+        else element.style.height = endHeight + "px";
         element.removeEventListener("transitionend", OnTransitionEnd);
         self._isAnimating = false;
       }
@@ -205,7 +193,7 @@
     }
   };
 
-  // ---------- Auto open/close on scroll ----------
+  // ---------- Auto open/close on scroll (center-based) ----------
 
   DrawerController.prototype.EnableScrollAutoToggle = function () {
     var self = this;
@@ -222,7 +210,7 @@
         if (self._scrollIdleTimerId) clearTimeout(self._scrollIdleTimerId);
         self._scrollIdleTimerId = setTimeout(function () {
           self._isScrollIdle = true;
-          self.OnScroll(); // once when scrolling settles
+          self.OnScroll();
         }, ScrollIdleMs);
       }, { passive: true });
 
@@ -246,7 +234,6 @@
 
   DrawerController.prototype.OnScroll = function () {
     var self = this;
-
     if (PauseAutoOpenWhileScrolling && !this._isScrollIdle) return;
     if (this._scrollRafPending) return;
 
@@ -254,53 +241,68 @@
 
     window.requestAnimationFrame(function () {
       self._scrollRafPending = false;
-      self.OpenClosestToViewportAnchor();
-      self._lastScrollY = window.pageYOffset || 0;
+      self.EvaluateByContentCenter();
     });
   };
 
-  DrawerController.prototype.OpenClosestToViewportAnchor = function () {
+  // Core: open if anchor is ABOVE the drawer's content center; close if BELOW
+  DrawerController.prototype.EvaluateByContentCenter = function () {
     var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
     var anchorY = viewportHeight * ViewportAnchorFraction;
-
-    var scrollingDown = (window.pageYOffset || 0) > this._lastScrollY;
-
-    var bestDrawer = null;
-    var bestScore = Number.POSITIVE_INFINITY;
     var now = this._now();
+
+    // Find the closest candidate to open (center below anchor)
+    var candidate = null;
+    var bestDelta = Infinity;
 
     for (var i = 0; i < this._drawers.length; i++) {
       var drawer = this._drawers[i];
 
-      // Skip drawers in their suppression window
+      // Respect suppression window
       var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
       if (lockedUntil > now) continue;
 
       var summary = drawer.querySelector("[data-drawer-summary]");
-      if (!summary) continue;
+      var content = drawer.querySelector("[data-drawer-content]");
+      if (!summary || !content) continue;
 
-      var dy = summary.getBoundingClientRect().top - anchorY; // negative = above anchor, positive = below
-      var base = Math.abs(dy);
+      var summaryRect = summary.getBoundingClientRect();
+      // center = bottom of title + half of the natural content height (even if collapsed)
+      var centerY = summaryRect.bottom + (content.scrollHeight / 2);
 
-      // Bias toward the drawer AHEAD of the scroll direction
-      var penalty = 0;
-      if (scrollingDown && dy < 0) penalty = HysteresisPx;        // it's behind you; penalize
-      if (!scrollingDown && dy > 0) penalty = HysteresisPx;
-
-      var score = base + penalty;
-
-      if (score < bestScore) {
-        bestScore = score;
-        bestDrawer = drawer;
+      var delta = centerY - anchorY; // positive: center below anchor; negative: above
+      if (delta >= CenterDeadbandPx && delta < bestDelta) {
+        bestDelta = delta;
+        candidate = drawer;
       }
     }
 
-    if (!bestDrawer) return;
+    // Open the closest valid candidate (if any)
+    if (candidate && !candidate.classList.contains("Drawer--Open")) {
+      this.OpenDrawer(candidate);
+    }
 
-    var alreadyOpen = bestDrawer.classList.contains("Drawer--Open");
-    if (!alreadyOpen) this.OpenDrawer(bestDrawer);
+    // Close drawers whose center is now above the anchor (beyond deadband)
+    for (var j = 0; j < this._drawers.length; j++) {
+      var d = this._drawers[j];
+      if (!d.classList.contains("Drawer--Open")) continue;
 
-    if (OnlyOneOpenAtATime) this.CloseSiblings(bestDrawer);
+      var s = d.querySelector("[data-drawer-summary]");
+      var c = d.querySelector("[data-drawer-content]");
+      if (!s || !c) continue;
+
+      var sRect = s.getBoundingClientRect();
+      var center = sRect.bottom + (c.scrollHeight / 2);
+      var diff = center - anchorY;
+
+      if (diff <= -CenterDeadbandPx) {
+        // center is above anchor → close
+        this.CloseDrawer(d);
+      } else if (OnlyOneOpenAtATime && candidate && d !== candidate) {
+        // enforce single-open if requested
+        this.CloseDrawer(d);
+      }
+    }
   };
 
   // ---------- Public helpers ----------
@@ -330,7 +332,7 @@
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     this.OpenById(openId);
-    this.CloseById(closeId); // locked close prevents auto-reopen
+    this.CloseById(closeId);
     this.ScrollToDrawer(openId);
   };
 
@@ -351,7 +353,7 @@
       (ViewportAnchorFraction * 100) + "vh"
     );
 
-    // Optional: keep the visual guide (comment these 3 lines to hide)
+    // (Optional) keep the visual guide line
     var guide = document.createElement("div");
     guide.className = "TriggerLine";
     document.body.appendChild(guide);
