@@ -79,21 +79,54 @@ body{
 }
 
 /*==========================================================
-  Drawers (full-bleed by default)
-  - Titles are visually hidden (still accessible)
+  Drawers (full-bleed containers)
+  - Title bar is visible and styled (square top, rounded bottom)
   - Content uses content-visibility for perf
-  - Each drawer lightens & hue-shifts progressively
+  - Each drawer’s bar lightens & hue-shifts progressively
 ==========================================================*/
 
-/* Each drawer spans the viewport (breaks out of the centered container) */
+/* Drawer block spans viewport (escapes centered container) */
 .Drawer{
   width: 100vw;
   margin-left: 50%;
   transform: translateX(-50%);
   max-width: none;
 
-  /* progressive HSL gradient background */
-  --_step: 0; /* overridden per drawer with :nth-of-type below */
+  /* per-drawer step variables (used by the title bar) */
+  --_step: 0; /* overridden per drawer below */
+
+  /* perf */
+  contain: paint;
+}
+
+/* Tight stacking — next bar becomes the hard divider line */
+.Drawer + .Drawer{
+  margin-top: 0;
+}
+
+/* Progressive lighten + hue shift by order */
+.Container > [data-drawer]:nth-of-type(1){ --_step: 0; }
+.Container > [data-drawer]:nth-of-type(2){ --_step: 1; }
+.Container > [data-drawer]:nth-of-type(3){ --_step: 2; }
+.Container > [data-drawer]:nth-of-type(4){ --_step: 3; }
+.Container > [data-drawer]:nth-of-type(5){ --_step: 4; }
+/* add lines as you add more drawers */
+
+/* ---------- Title Bar (always visible) ---------- */
+.DrawerTitle{
+  /* layout */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  margin: 0;
+  min-height: var(--DrawerCollapsedHeight);
+  cursor: pointer;
+  user-select: none;
+  color: #fff;
+
+  /* per-drawer HSL gradient based on step */
   --_h:  calc(var(--DrawerHueBase)   + var(--DrawerHueStep)   * var(--_step));
   --_s:  calc(var(--DrawerSatBase)   + var(--DrawerSatStep)   * var(--_step));
   --_l0: calc(var(--DrawerLightBase) + var(--DrawerLightStep) * var(--_step));       /* top */
@@ -105,42 +138,29 @@ body{
     hsl(var(--_h), var(--_s), var(--_l1)) 100%
   );
 
-  /* rounded bottom corners (stacked section look) */
+  /* square top, rounded bottom */
   border-radius: 0 0 16px 16px;
 
-  /* subtle seam on top to separate drawers */
+  /* seam at top edge so stacked bars have a crisp line */
   border-top: 1px solid rgba(255,255,255,0.06);
 
-  /* clip children (e.g., videos) to rounded corners */
-  overflow: hidden;
-
-  /* perf */
-  contain: paint;
+  /* focus styles */
+  outline: none;
+}
+.DrawerTitle:focus-visible{
+  outline: 2px solid var(--ColorAccent);
+  outline-offset: 4px;
 }
 
-/* spacing between sections */
-.Drawer + .Drawer{
-  margin-top: 24px;
+/* caret if you render it */
+.Caret{
+  width: 1.25rem;
+  height: 1.25rem;
+  transition: transform var(--AnimationDurationMs) ease;
 }
+.Drawer--Open .Caret{ transform: rotate(180deg); }
 
-/* progressive lighten + hue shift by order */
-.Container > [data-drawer]:nth-of-type(1){ --_step: 0; }
-.Container > [data-drawer]:nth-of-type(2){ --_step: 1; }
-.Container > [data-drawer]:nth-of-type(3){ --_step: 2; }
-.Container > [data-drawer]:nth-of-type(4){ --_step: 3; }
-.Container > [data-drawer]:nth-of-type(5){ --_step: 4; }
-/* add lines as you add more drawers */
-
-/* Visually hidden, screen-reader accessible heading */
-.DrawerTitle{
-  position: absolute !important;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0);
-  white-space: nowrap; border: 0;
-}
-
-/* Drawer content block (padded by default for text sections) */
+/* ---------- Drawer Content (unrounded) ---------- */
 .DrawerContent{
   padding: 0 1rem 24px 1rem;      /* gentle LR padding for readability */
   display: grid;
@@ -167,30 +187,18 @@ body{
   display: block;
   width: 100vw;
   max-width: none;
-  border-radius: 0; /* parent drawer already clips */
+  border-radius: 0; /* bar above already has its own rounding */
 }
-
-/* (Kept for future: caret rotation if titles become visible again) */
-.Caret{
-  width: 1.25rem;
-  height: 1.25rem;
-  transition: transform var(--AnimationDurationMs) ease;
-}
-.Drawer--Open .Caret{ transform: rotate(180deg); }
 
 /*==========================================================
   Hero Utilities
 ==========================================================*/
-
-/* Intro/hero video fills viewport height (mobile-safe units) */
 .HeroViewport{
   height: 100svh;                 /* modern “safe” unit */
   height: 100vh;                  /* fallback */
   object-fit: cover;              /* cinematic fill (may crop) */
   background: #000;               /* avoid flashes behind video */
 }
-
-/* Shorter hero variant (e.g., Tour) */
 .HeroShort{
   height: 70svh;
   height: 70vh;
@@ -207,7 +215,6 @@ body{
   background: #000;
 }
 
-/* Skip button */
 .SkipRow{
   display: flex;
   justify-content: flex-end;
@@ -241,7 +248,7 @@ body{
 }
 
 /*==========================================================
-  Toolbar / Dock (safe to keep; unused styles do no harm)
+  Toolbar / Dock (kept; harmless if unused)
 ==========================================================*/
 .Toolbar{
   position: fixed;
@@ -261,7 +268,6 @@ body{
 }
 .Toolbar--Hidden{ transform: translateY(-110%); }
 .ToolbarSpacer{ flex: 1; }
-
 .ToolbarButton{
   appearance: none;
   border: 1px solid rgba(255,255,255,0.5);
@@ -281,8 +287,6 @@ body{
   outline-offset: 2px;
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
-
-/* Drawer handle button (chevron) */
 .ToolbarHandle{
   position: fixed;
   top: 8px; right: 12px;
@@ -304,8 +308,6 @@ body{
   outline-offset: 2px;
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
-
-/* Keep content clear of fixed toolbar */
 .ToolbarPadder{ height: 64px; }
 
 /*==========================================================
