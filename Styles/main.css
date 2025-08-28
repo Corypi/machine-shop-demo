@@ -275,27 +275,6 @@ video[autoplay][muted]::-webkit-media-controls { display: none !important; }
 video[autoplay][muted]::-moz-media-controls    { display: none !important; }
 video[autoplay][muted]::-ms-media-controls     { display: none !important; }
 
-/* === Overlay Skip button (iOS-safe, wins cascade) === */
-.SkipButton.SkipButton--Overlay{
-  position: absolute;
-  z-index: 5;
-
-  /* Always inset at least 30px; respect safe-area */
-  right: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-right));
-  bottom: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-bottom));
-
-  /* Kill base margins & any auto stretching quirks */
-  margin: 0 !important;
-  width: auto;
-  height: auto;
-  display: block;
-  white-space: nowrap;
-  -webkit-backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
-  backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
-}
-
-/* Ensure the overlay anchors to the video container */
-.DrawerContent--Fill{ position: relative; }
 /*==========================================================
   Skip Button base
 ==========================================================*/
@@ -330,6 +309,29 @@ video[autoplay][muted]::-ms-media-controls     { display: none !important; }
   outline-offset: 3px;
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
+
+/* === Overlay Skip button (iOS-safe, wins cascade) === */
+.SkipButton.SkipButton--Overlay{
+  position: absolute;
+  z-index: 5;
+
+  /* Always inset at least 30px; respect safe-area */
+  right: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-right));
+  bottom: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-bottom));
+
+  /* Kill base margins & any auto stretching quirks */
+  margin: 0 !important;
+  width: auto;
+  height: auto;
+  display: block;
+  white-space: nowrap;
+  -webkit-backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
+  backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
+}
+
+/* Ensure the overlay anchors to the video container */
+.DrawerContent--Fill{ position: relative; }
+
 
 /*==========================================================
   Footer
