@@ -251,6 +251,48 @@ body{
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
 
+/* ================================
+   Overlay Skip button on videos
+   ================================ */
+
+/* Ensure the content area can anchor absolute children */
+.DrawerContent--Fill {
+  position: relative;
+}
+
+/* Skip button floats over the video, 30px in from bottom-right.
+   Safe-area env() avoids clashing with iOS home indicator. */
+.SkipButton--Overlay {
+  position: absolute;
+  z-index: 5;
+  right: calc(30px + env(safe-area-inset-right));
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  margin: 0;                 /* ignore flow margins */
+  backdrop-filter: blur(4px);
+}
+
+/* Optional: slightly stronger hover/press feedback when over video */
+.SkipButton--Overlay:hover  { background: rgba(255,255,255,0.26); }
+.SkipButton--Overlay:active { background: rgba(255,255,255,0.38); transform: scale(0.97); }
+
+/* Keep the video fill behavior consistent even when controls/end overlay show */
+.VideoFixed {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;         /* always fill (crop as needed) */
+  object-position: center;
+  background: #000;
+}
+
+/* If the browser tries to reserve space for controls, this maintains layout.
+   (Not all browsers need this, but it doesn't hurt.) */
+.Drawer--FixedHero  > .DrawerContent,
+.Drawer--FixedShort > .DrawerContent {
+  height: calc(100% - var(--DrawerCollapsedHeight));
+  min-height: 0;             /* prevent flex/grid min-content growth */
+}
+
 /*==========================================================
   Footer
 ==========================================================*/
