@@ -1,182 +1,178 @@
-:root
-{
-  /* Color palette */
+/*==========================================================
+  Design Tokens
+==========================================================*/
+:root{
+  /* Colors */
   --ColorBackground: #0b0d10;
   --ColorForeground: #e9edf1;
-  --ColorMuted: #9aa6b2;
-  --ColorCard: #12161b;
-  --ColorAccent: #48b0ff;
+  --ColorMuted:      #9aa6b2;
+  --ColorCard:       #12161b;      /* kept for future use */
+  --ColorAccent:     #48b0ff;
 
-  /* Layout constants */
+  /* Layout */
   --MaxWidth: 1100px;
-  --Radius: 12px;
-  --Gap: 12px;
+  --Radius:   12px;
+  --Gap:      12px;
 
-  /* Drawer behavior (no “magic numbers”) */
-  --DrawerCollapsedHeight: 2.75rem;   /* header height when collapsed */
-  --DrawerExpandedMaxHeight: 500px;   /* visual max when open (non-animated) */
-  --DrawerBorder: #222a33;
+  /* Drawer behavior */
+  --DrawerCollapsedHeight: 2.75rem;  /* header height when collapsed */
+  --DrawerExpandedMaxHeight: 500px;  /* non-animated fallback max */
 
-  /* Animation & rendering hints */
+  /* Animation & perf */
   --AnimationDurationMs: 220ms;
-  --DrawerIntrinsicSize: 420px;       /* approximate content height for c-v */
+  --DrawerIntrinsicSize: 420px;      /* content-visibility size hint */
 }
 
-* { box-sizing: border-box; }
-html, body { height: 100%; }
+/*==========================================================
+  Base / Resets
+==========================================================*/
+*{ box-sizing: border-box; }
+html, body{ height: 100%; }
+html, body{ overflow-x: hidden; }     /* prevent 100vw scrollbars */
 
-body
-{
+body{
   margin: 0;
   color: var(--ColorForeground);
   background: var(--ColorBackground);
   font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
-.Header
-{
+/*==========================================================
+  Header
+==========================================================*/
+.Header{
   background: #1a2027;
   color: #ffffff;
   padding: 1rem;
   text-align: center;
   border-bottom: 1px solid #0e141a;
 }
-
-.HeaderTitle
-{
+.HeaderTitle{
   margin: 0;
   font-size: clamp(1.5rem, 3.2vw, 2.4rem);
 }
-
-.HeaderSubtitle
-{
+.HeaderSubtitle{
   margin: 0.25rem 0 0;
   color: #cfd8e3;
 }
 
-.Container
-{
+/*==========================================================
+  Container (centered content; full-bleed sections can escape)
+==========================================================*/
+.Container{
   max-width: var(--MaxWidth);
   margin: 2rem auto;
   padding: 0 1rem;
 }
-
-.SectionTitle
-{
+.SectionTitle{
   margin: 0 0 0.75rem 0;
   font-size: 1.25rem;
   color: var(--ColorMuted);
 }
 
-/* Drawer (original card styles — will be overridden below for full-width sections) */
-.Drawer
-{
-  background: var(--ColorCard);
-  border: 1px solid var(--DrawerBorder);
-  border-radius: var(--Radius);
-  overflow: hidden;          /* keep borders tidy during height anims */
-  margin-top: var(--Gap);
-  contain: paint;            /* isolate repaints for smoother anims */
-}
-
-.Drawer:first-of-type
-{
+/*==========================================================
+  Drawers (section-as-drawer; toolbar controls visibility)
+  - We visually hide titles (still accessible)
+  - Content remains performant with content-visibility
+==========================================================*/
+.Drawer{
+  /* full-width sections (no “card chrome”) */
+  background: transparent;
+  border: none;
+  border-radius: 0;
   margin-top: 0;
+  contain: paint;                 /* isolate repaints */
+}
+.Drawer + .Drawer{                /* breathing room between sections */
+  margin-top: 24px;
 }
 
-.DrawerTitle
-{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
-  margin: 0;
-  font-weight: 700;
-  cursor: pointer;
-  user-select: none;
-  min-height: var(--DrawerCollapsedHeight);
+/* Visually hidden, screen-reader accessible */
+.DrawerTitle{
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
 }
 
-.DrawerTitle:focus
-{
-  outline: none;
-}
-
-.DrawerTitle:focus-visible
-{
-  outline: 2px solid var(--ColorAccent);
-  outline-offset: 4px;
-}
-
-/* Caret rotation */
-.Caret
-{
-  width: 1.25rem;
-  height: 1.25rem;
-  transition: transform var(--AnimationDurationMs) ease;
-}
-
-.Drawer--Open .Caret
-{
-  transform: rotate(180deg);
-}
-
-/* Content */
-.DrawerContent
-{
-  padding: 0.25rem 1.125rem 1rem 1.125rem;
+/* Drawer content block */
+.DrawerContent{
+  padding: 0 0 24px 0;            /* simple vertical rhythm */
   display: grid;
   gap: 0.75rem;
   color: #cdd6df;
 
-  /* Collapsed-by-default fallback when JS is off */
+  /* Fallback max when JS is off */
   max-height: var(--DrawerExpandedMaxHeight);
 
   /* Performance hints */
-  content-visibility: auto;                 /* skip rendering off-screen */
+  content-visibility: auto;                 /* skip off-screen work */
   contain-intrinsic-size: var(--DrawerIntrinsicSize);
-  overflow: clip;                            /* hide during height anim */
+  overflow: clip;                            /* tidy height anims */
 }
 
-/* Respect reduced motion preferences (base) */
-@media (prefers-reduced-motion: reduce)
-{
-  .Caret
-  {
-    transition: none !important;
-  }
-
-  .DrawerContent
-  {
-    transition: none !important;
-  }
+/* (Kept for future: caret rotation if titles become visible again) */
+.Caret{
+  width: 1.25rem;
+  height: 1.25rem;
+  transition: transform var(--AnimationDurationMs) ease;
 }
+.Drawer--Open .Caret{ transform: rotate(180deg); }
 
-.Footer
-{
-  padding: 2rem 1rem;
-  text-align: center;
-  color: var(--ColorMuted);
-  border-top: 1px solid #11161b;
+/*==========================================================
+  Full-Bleed Utilities (edge-to-edge)
+==========================================================*/
+/* Break a section out of the centered container to span viewport width */
+.FullBleed{
+  width: 100vw;
+  margin-left: 50%;
+  transform: translateX(-50%);
+  max-width: none;
 }
-
-/* ===================================================== */
-/* Intro drawer + Skip button styles                     */
-/* ===================================================== */
-
-.IntroVideo
-{
-  width: 100%;
-  height: 70vh;           /* fixed viewport height for a strong hero feel */
+/* Remove padding for true edge-to-edge within full-bleed sections */
+.FullBleed .DrawerContent{ padding: 0; }
+/* Media inside full-bleed should also be edge-to-edge */
+.FullBleed video,
+.FullBleed img{
   display: block;
-  border-radius: 8px;
-  background: #000;
-  object-fit: cover;      /* EDGE-TO-EDGE FILL (may crop) */
+  width: 100vw;
+  max-width: none;
+  border-radius: 0;
 }
 
-.SkipButton
-{
+/* Hero (intro) video fills viewport height (mobile-safe units) */
+.HeroViewport{
+  height: 100svh;   /* modern “safe” unit */
+  height: 100vh;    /* fallback */
+  object-fit: cover;  /* cinematic fill (may crop) */
+  background: #000;   /* avoid flashes behind video */
+}
+/* Alternate shorter hero (e.g., for Tour) */
+.HeroShort{
+  height: 70svh;
+  height: 70vh;
+  object-fit: cover;
+  background: #000;
+}
+
+/*==========================================================
+  Intro Video (base) + Skip Button
+==========================================================*/
+.IntroVideo{
+  width: 100%;
+  display: block;
+  background: #000;
+}
+
+/* Skip button */
+.SkipRow{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+.SkipButton{
   position: relative;
   display: inline-block;
   margin-top: 0.5rem;
@@ -190,44 +186,22 @@ body
   cursor: pointer;
   transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
 }
-
-.SkipButton:hover
-{
-  background: rgba(255,255,255,0.2);
-}
-
-.SkipButton:active
-{
+.SkipButton:hover{  background: rgba(255,255,255,0.2); }
+.SkipButton:active{
   background: rgba(255,255,255,0.35);
-  transform: scale(0.96); /* subtle press effect */
+  transform: scale(0.96);
 }
-
-.SkipButton:focus
-{
-  outline: none; /* rely on focus-visible ring below */
-}
-
-.SkipButton:focus-visible
-{
+.SkipButton:focus{ outline: none; }
+.SkipButton:focus-visible{
   outline: 2px solid var(--ColorAccent);
   outline-offset: 3px;
-  box-shadow: 0 0 0 3px rgba(72,176,255,0.25); /* soft halo for visibility */
+  box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
 
-.SkipRow
-{
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-/* ===================================================== */
-/* Top Toolbar / Dock                                    */
-/* ===================================================== */
-
-.Toolbar
-{
+/*==========================================================
+  Toolbar / Dock
+==========================================================*/
+.Toolbar{
   position: fixed;
   top: 0; left: 0; right: 0;
   z-index: 10;
@@ -243,16 +217,10 @@ body
   will-change: transform;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
+.Toolbar--Hidden{ transform: translateY(-110%); }
+.ToolbarSpacer{ flex: 1; }
 
-.Toolbar--Hidden
-{
-  transform: translateY(-110%);
-}
-
-.ToolbarSpacer { flex: 1; }
-
-.ToolbarButton
-{
+.ToolbarButton{
   appearance: none;
   border: 1px solid rgba(255,255,255,0.5);
   background: rgba(0,0,0,0.55);
@@ -263,20 +231,17 @@ body
   cursor: pointer;
   transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
 }
-
-.ToolbarButton:hover { background: rgba(255,255,255,0.18); }
-.ToolbarButton:active { transform: scale(0.96); }
-.ToolbarButton:focus { outline: none; }
-.ToolbarButton:focus-visible
-{
+.ToolbarButton:hover{  background: rgba(255,255,255,0.18); }
+.ToolbarButton:active{ transform: scale(0.96); }
+.ToolbarButton:focus{  outline: none; }
+.ToolbarButton:focus-visible{
   outline: 2px solid var(--ColorAccent);
   outline-offset: 2px;
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
 
-/* Drawer handle button (top-right chevron) */
-.ToolbarHandle
-{
+/* Drawer handle button (chevron) */
+.ToolbarHandle{
   position: fixed;
   top: 8px; right: 12px;
   z-index: 11;
@@ -289,95 +254,44 @@ body
   cursor: pointer;
   transition: background 150ms ease, transform 150ms ease, opacity 150ms ease;
 }
-
-.ToolbarHandle:hover  { background: rgba(0,0,0,0.7); }
-.ToolbarHandle:active { transform: scale(0.96); }
-.ToolbarHandle:focus { outline: none; }
-.ToolbarHandle:focus-visible
-{
+.ToolbarHandle:hover{  background: rgba(0,0,0,0.7); }
+.ToolbarHandle:active{ transform: scale(0.96); }
+.ToolbarHandle:focus{  outline: none; }
+.ToolbarHandle:focus-visible{
   outline: 2px solid var(--ColorAccent);
   outline-offset: 2px;
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
 
-/* Push main content below fixed toolbar */
-.ToolbarPadder
-{
-  height: 64px;
+/* Keep content clear of fixed toolbar */
+.ToolbarPadder{ height: 64px; }
+
+/*==========================================================
+  Footer
+==========================================================*/
+.Footer{
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--ColorMuted);
+  border-top: 1px solid #11161b;
 }
 
-/* ===================================================== */
-/* Drawers as full-width sections                        */
-/* ===================================================== */
+/*==========================================================
+  Reduced Motion
+==========================================================*/
+@media (prefers-reduced-motion: reduce){
+  .Caret{ transition: none !important; }
 
-/* Remove card chrome to feel like full-width pages */
-.Drawer
-{
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  margin-top: 0;
-  contain: paint;
-}
-
-.Drawer + .Drawer
-{
-  margin-top: 24px; /* breathing room between sections */
-}
-
-/* Keep for accessibility, hide visually; toolbar controls sections */
-.DrawerTitle
-{
-  position: absolute !important;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0);
-  white-space: nowrap; border: 0;
-}
-
-.DrawerContent
-{
-  padding: 0 0 24px 0;   /* simpler vertical rhythm */
-  gap: 0.75rem;
-  color: #cdd6df;
-  max-height: var(--DrawerExpandedMaxHeight);
-  content-visibility: auto;
-  contain-intrinsic-size: var(--DrawerIntrinsicSize);
-  overflow: clip;
-}
-
-/* ===================================================== */
-/* Full-bleed utility for edge-to-edge sections           */
-/* ===================================================== */
-
-.FullBleed
-{
-  width: 100vw;                /* span viewport width */
-  margin-left: 50%;
-  transform: translateX(-50%); /* center relative to viewport */
-  max-width: none;             /* ignore container max-width */
-}
-
-.FullBleed video,
-.FullBleed img
-{
-  border-radius: 0;             /* square edges for true full bleed */
-}
-
-/* Reduced motion: remove scale on active press (toolbar + skip) */
-@media (prefers-reduced-motion: reduce)
-{
+  .DrawerContent,
   .SkipButton,
   .ToolbarButton,
-  .ToolbarHandle
-  {
+  .ToolbarHandle{
     transition: background 0.2s ease !important;
   }
 
   .SkipButton:active,
   .ToolbarButton:active,
-  .ToolbarHandle:active
-  {
+  .ToolbarHandle:active{
     transform: none !important;
   }
 }
