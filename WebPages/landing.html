@@ -30,16 +30,18 @@
       <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
 
         <!-- Fixed-height, width-overflow hero video -->
-        <div class="VideoFrame VideoFrame--Hero">
-          <video
-            class="VideoFixed"
-            src="../Assets/Movie_001.mp4"
-            autoplay
-            muted
-            playsinline
-            controls
-            onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
-          </video>
+       <div class="VideoFrame VideoFrame--Hero">
+  <video
+    class="VideoFixed"
+    src="../Assets/Movie_001.mp4"
+    autoplay
+    muted
+    playsinline
+    webkit-playsinline
+    controls
+    onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+  </video>
+
         </div>
 
         <!-- keep a little padding for the skip button under the full-bleed video -->
@@ -71,14 +73,16 @@
       <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
 
         <!-- Fixed-height, width-overflow short hero video -->
-        <div class="VideoFrame VideoFrame--Short">
-          <video
-            class="VideoFixed"
-            src="../Assets/shop_tour.mp4"
-            controls
-            preload="metadata"
-            playsinline>
-          </video>
+       <div class="VideoFrame VideoFrame--Short">
+  <video
+    class="VideoFixed"
+    src="../Assets/shop_tour.mp4"
+    controls
+    preload="metadata"
+    playsinline
+    webkit-playsinline>
+  </video>
+
         </div>
 
         <p style="padding: 0 1rem;">Walkthrough of our machines, inspection, and finishing areas.</p>
