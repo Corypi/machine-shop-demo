@@ -199,6 +199,11 @@ body{
   background: #000;
 }
 
+/* Suppress native controls UI completely */
+.VideoFixed::-webkit-media-controls { display: none !important; }
+.VideoFixed::-moz-media-controls { display: none !important; }
+.VideoFixed::-ms-media-controls { display: none !important; }
+
 /* Optional overlay Skip button that doesn't change layout height */
 .SkipButton--Overlay{
   position: absolute;
