@@ -1,130 +1,278 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Machine Shop Demo</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="../Styles/main.css" />
-</head>
-<body>
+/*==========================================================
+  Design Tokens
+==========================================================*/
+:root{
+  /* Colors */
+  --ColorBackground: #0b0d10;
+  --ColorForeground: #e9edf1;
+  --ColorMuted:      #9aa6b2;
+  --ColorCard:       #12161b;      /* kept for future use */
+  --ColorAccent:     #48b0ff;
 
-  <!-- ======================================================
-       Header
-  ======================================================= -->
-  <header class="Header">
-    <h1 class="HeaderTitle">Welcome to Our Machine Shop</h1>
-    <p class="HeaderSubtitle">High-precision parts, modern capabilities.</p>
-  </header>
+  /* Layout */
+  --MaxWidth: 1100px;
+  --Radius:   12px;
+  --Gap:      12px;
 
-  <!-- ======================================================
-       Main
-  ======================================================= -->
-  <main class="Container" id="Top">
-    <h2 class="SectionTitle">Explore</h2>
+  /* Drawer behavior */
+  --DrawerCollapsedHeight:   2.75rem;  /* header height when collapsed */
+  --DrawerExpandedMaxHeight: 500px;    /* non-animated fallback max */
 
-    <!-- ====================================================
-         Intro (fixed-height hero; open by default)
-    ===================================================== -->
-    <section class="Drawer Drawer--Open" id="Intro" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">Intro</h3>
-      <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
+  /* Animation & perf */
+  --AnimationDurationMs: 220ms;
+  --DrawerIntrinsicSize: 420px;        /* content-visibility size hint */
 
-        <!-- FIXED-HEIGHT WRAPPER + FILL VIDEO -->
-        <div class="VideoFrame VideoFrame--Hero">
-          <video
-            class="VideoFixed IntroVideo"
-            src="../Assets/Movie_001.mp4"
-            autoplay
-            muted
-            playsinline
-            webkit-playsinline
-            controls
-            onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
-          </video>
-        </div>
+  /* Drawer color system (HSL base + per-drawer stepping) */
+  --DrawerHueBase:   210;   /* base hue to harmonize with bg */
+  --DrawerHueStep:     2;   /* hue shift per drawer (degrees) */
+  --DrawerSatBase:    18%;  /* base saturation */
+  --DrawerSatStep:     0%;  /* saturation change per drawer */
+  --DrawerLightBase:   7%;  /* top drawer lightness */
+  --DrawerLightStep:  3.5%; /* lightness increase per drawer */
+}
 
-        <!-- keep a little padding for the skip button under the full-bleed video -->
-        <div class="SkipRow" style="padding: 0 1rem 1rem;">
-          <button class="SkipButton"
-                  onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
-            Skip Intro
-          </button>
-        </div>
-      </div>
-    </section>
+/*==========================================================
+  Base / Resets
+==========================================================*/
+*{ box-sizing: border-box; }
+html, body{ height: 100%; }
+html, body{ overflow-x: hidden; }     /* prevent 100vw scrollbars */
 
-    <!-- ====================================================
-         About
-    ===================================================== -->
-    <section class="Drawer" id="About" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">About Us</h3>
-      <div class="DrawerContent" data-drawer-content>
-        <p>We machine complex parts with tight tolerances and consistent turnaround.</p>
-        <p>ISO-style processes, modern CAM, and a quality-first culture.</p>
-      </div>
-    </section>
+body{
+  margin: 0;
+  color: var(--ColorForeground);
+  background: var(--ColorBackground);
+  font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
 
-    <!-- ====================================================
-         Shop Tour (fixed-height short hero)
-    ===================================================== -->
-    <section class="Drawer" id="Tour" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Shop Tour</h3>
-      <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
+/*==========================================================
+  Header
+==========================================================*/
+.Header{
+  background: #1a2027;
+  color: #ffffff;
+  padding: 1rem;
+  text-align: center;
+  border-bottom: 1px solid #0e141a;
+}
+.HeaderTitle{
+  margin: 0;
+  font-size: clamp(1.5rem, 3.2vw, 2.4rem);
+}
+.HeaderSubtitle{
+  margin: 0.25rem 0 0;
+  color: #cfd8e3;
+}
 
-        <!-- FIXED-HEIGHT WRAPPER + FILL VIDEO -->
-        <div class="VideoFrame VideoFrame--Short">
-          <video
-            class="VideoFixed IntroVideo"
-            src="../Assets/shop_tour.mp4"
-            controls
-            preload="metadata"
-            playsinline
-            webkit-playsinline>
-          </video>
-        </div>
+/*==========================================================
+  Container (centered content; full-bleed drawers escape)
+==========================================================*/
+.Container{
+  max-width: var(--MaxWidth);
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+.SectionTitle{
+  margin: 0 0 0.75rem 0;
+  font-size: 1.25rem;
+  color: var(--ColorMuted);
+}
 
-        <p style="padding: 0 1rem;">Walkthrough of our machines, inspection, and finishing areas.</p>
-      </div>
-    </section>
+/*==========================================================
+  Drawers (full-width containers)
+  - Title bar is visible (square top, rounded bottom)
+  - Each title bar lightens & hue-shifts progressively
+==========================================================*/
 
-    <!-- ====================================================
-         Capabilities
-    ===================================================== -->
-    <section class="Drawer" id="Capabilities" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Capabilities</h3>
-      <div class="DrawerContent" data-drawer-content>
-        <ul>
-          <li>3-axis &amp; 5-axis milling, CNC turning</li>
-          <li>Materials: 6061/7075, 304/316, 4140, brass, plastics</li>
-          <li>Finishes: anodize II/III, passivate, bead blast</li>
-          <li>Inspection: calibrated metrology, first-article docs</li>
-        </ul>
-      </div>
-    </section>
+/* Drawer block spans viewport (escapes centered container) */
+.Drawer{
+  width: 100vw;
+  margin-left: 50%;
+  transform: translateX(-50%);
+  max-width: none;
 
-    <!-- ====================================================
-         Contact
-    ===================================================== -->
-    <section class="Drawer" id="Contact" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Contact</h3>
-      <div class="DrawerContent" data-drawer-content>
-        <p>Email: <a href="mailto:info@example.com">info@example.com</a></p>
-        <p>Phone: 555-0100</p>
-      </div>
-    </section>
-  </main>
+  /* per-drawer step variable (used by the title bar) */
+  --_step: 0;
 
-  <!-- ======================================================
-       Footer
-  ======================================================= -->
-  <footer class="Footer">
-    <small>© <span id="Year"></span> Acme Precision • Demo</small>
-  </footer>
+  contain: paint; /* perf */
+}
 
-  <!-- ======================================================
-       Scripts
-  ======================================================= -->
-  <script src="../Scripts/Utilities.js"></script>
-  <script src="../Scripts/Drawers.js"></script>
-</body>
-</html>
+/* Stack tightly — next bar becomes the hard divider line */
+.Drawer + .Drawer{ margin-top: 0; }
+
+/* Progressive lighten + hue shift by order */
+.Container > [data-drawer]:nth-of-type(1){ --_step: 0; }
+.Container > [data-drawer]:nth-of-type(2){ --_step: 1; }
+.Container > [data-drawer]:nth-of-type(3){ --_step: 2; }
+.Container > [data-drawer]:nth-of-type(4){ --_step: 3; }
+.Container > [data-drawer]:nth-of-type(5){ --_step: 4; }
+/* add more lines as you add more drawers */
+
+/* ---------- Title Bar (always visible) ---------- */
+.DrawerTitle{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  margin: 0;
+  min-height: var(--DrawerCollapsedHeight);
+  cursor: pointer;
+  user-select: none;
+  color: #fff;
+
+  /* per-drawer HSL gradient based on step */
+  --_h:  calc(var(--DrawerHueBase)   + var(--DrawerHueStep)   * var(--_step));
+  --_s:  calc(var(--DrawerSatBase)   + var(--DrawerSatStep)   * var(--_step));
+  --_l0: calc(var(--DrawerLightBase) + var(--DrawerLightStep) * var(--_step));       /* top */
+  --_l1: calc(var(--DrawerLightBase) + var(--DrawerLightStep) * var(--_step) + 2%);  /* bottom */
+
+  background: linear-gradient(
+    180deg,
+    hsl(var(--_h), var(--_s), var(--_l0)) 0%,
+    hsl(var(--_h), var(--_s), var(--_l1)) 100%
+  );
+
+  /* square top, rounded bottom */
+  border-radius: 0 0 16px 16px;
+
+  /* seam at top edge so stacked bars have a crisp line */
+  border-top: 1px solid rgba(255,255,255,0.06);
+
+  outline: none; /* rely on focus-visible */
+}
+.DrawerTitle:focus-visible{
+  outline: 2px solid var(--ColorAccent);
+  outline-offset: 4px;
+}
+
+/* caret (if you render one) */
+.Caret{
+  width: 1.25rem;
+  height: 1.25rem;
+  transition: transform var(--AnimationDurationMs) ease;
+}
+.Drawer--Open .Caret{ transform: rotate(180deg); }
+
+/* ---------- Drawer Content (unrounded) ---------- */
+.DrawerContent{
+  padding: 0 1rem 24px 1rem;  /* gentle LR padding for text sections */
+  display: grid;
+  gap: 0.75rem;
+  color: #cdd6df;
+
+  /* fallback when JS is off */
+  max-height: var(--DrawerExpandedMaxHeight);
+
+  /* performance hints */
+  content-visibility: auto;
+  contain-intrinsic-size: var(--DrawerIntrinsicSize);
+  overflow: clip;
+}
+
+/* Remove padding (perfect for full-bleed / fixed-height media) */
+.DrawerContent--Flush,
+.DrawerContent--Fill{
+  padding: 0;
+}
+
+/*==========================================================
+  Fixed-height Video (width may overflow; clipped)
+==========================================================*/
+
+/* Height presets on the drawer itself */
+.Drawer--FixedHero  { height: 100svh; height: 100vh; }
+.Drawer--FixedShort { height: 70svh;  height: 70vh;  }
+
+/* Make the content area fill that fixed drawer height */
+.Drawer--FixedHero  > .DrawerContent,
+.Drawer--FixedShort > .DrawerContent{
+  height: calc(100% - var(--DrawerCollapsedHeight));
+}
+
+/* Fill video inside the content area — no letterboxing */
+.VideoFixed{
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;   /* crop sides to fill the frame */
+  background: #000;
+}
+
+/* Optional overlay Skip button that doesn't change layout height */
+.SkipButton--Overlay{
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+}
+
+/* To allow overlay positioning within the content area */
+.DrawerContent{ position: relative; }
+
+/* Slightly shorter heroes on very small phones */
+@media (max-width: 420px){
+  .Drawer--FixedHero  { height: 92svh; height: 92vh; }
+  .Drawer--FixedShort { height: 60svh; height: 60vh; }
+}
+
+/*==========================================================
+  Skip Button base
+==========================================================*/
+.SkipRow{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+.SkipButton{
+  position: relative;
+  display: inline-block;
+  margin-top: 0.5rem;
+  margin-left: auto;
+  padding: 0.5rem 0.9rem;
+  font-weight: 700;
+  border: 2px solid #ffffff;
+  border-radius: 6px;
+  color: #ffffff;
+  background: rgba(0,0,0,0.55);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
+}
+.SkipButton:hover{  background: rgba(255,255,255,0.2); }
+.SkipButton:active{
+  background: rgba(255,255,255,0.35);
+  transform: scale(0.96);
+}
+.SkipButton:focus{ outline: none; }
+.SkipButton:focus-visible{
+  outline: 2px solid var(--ColorAccent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
+}
+
+/*==========================================================
+  Footer
+==========================================================*/
+.Footer{
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--ColorMuted);
+  border-top: 1px solid #11161b;
+}
+
+/*==========================================================
+  Reduced Motion
+==========================================================*/
+@media (prefers-reduced-motion: reduce){
+  .Caret{ transition: none !important; }
+
+  .DrawerContent,
+  .SkipButton{
+    transition: background 0.2s ease !important;
+  }
+
+  .SkipButton:active{
+    transform: none !important;
+  }
+}
