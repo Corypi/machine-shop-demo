@@ -285,7 +285,6 @@
 
       window.addEventListener("resize", function ()
       {
-        // Treat resize as an immediate idle event to realign the anchor
         self._isScrollIdle = true;
         self.OnScroll();
       });
@@ -296,7 +295,6 @@
       window.addEventListener("resize", this.OnScroll.bind(this));
     }
 
-    // Initial selection
     this.OnScroll();
   };
 
@@ -362,10 +360,7 @@
       }
     }
 
-    if (!bestDrawer)
-    {
-      return;
-    }
+    if (!bestDrawer) { return; }
 
     var alreadyOpen = bestDrawer.classList.contains("Drawer--Open");
     if (!alreadyOpen)
@@ -378,7 +373,7 @@
       this.CloseSiblings(bestDrawer);
     }
   };
-  
+
   // ---------- Public helpers ----------
 
   DrawerController.prototype.OpenById = function (id)
@@ -409,7 +404,6 @@
   {
     var drawer = document.getElementById(id);
     if (!drawer) { return; }
-    // Align the drawer title near the top with some offset
     var title = drawer.querySelector("[data-drawer-summary]") || drawer;
     var y = title.getBoundingClientRect().top + window.pageYOffset - 16;
     window.scrollTo({ top: y, behavior: "smooth" });
@@ -421,8 +415,6 @@
     this.CloseById(closeId);
     this.ScrollToDrawer(openId);
   };
-  
-  // ---------- Internal helpers ----------
 
   DrawerController.prototype._FindAncestorDrawer = function (node)
   {
@@ -439,27 +431,33 @@
 
   // ---------- Boot ----------
 
-    function InitializeDrawersWhenReady()
+  function InitializeDrawersWhenReady()
   {
+    // sync CSS variable so overlay line matches ViewportAnchorFraction
+    document.documentElement.style.setProperty(
+      "--DrawerTriggerVH",
+      (ViewportAnchorFraction * 100) + "vh"
+    );
+
+    // inject a yellow guide line element (optional debug)
+    var guide = document.createElement("div");
+    guide.className = "TriggerLine";
+    document.body.appendChild(guide);
+
     var root = document;
     var instance = new DrawerController(root);
-    // Expose globally for simple onended/onclick handlers
     window.DrawersController = instance;
   }
 
   if (document.readyState === "loading")
   {
-    document.addEventListener("DOMContentLoaded", function ()
-    {
-      InitializeDrawersWhenReady();
-    });
+    document.addEventListener("DOMContentLoaded", InitializeDrawersWhenReady);
   }
   else
   {
     InitializeDrawersWhenReady();
   }
 
-  // Expose to window in case you want manual control elsewhere
   window.DrawerController = DrawerController;
 
 })();
