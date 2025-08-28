@@ -275,24 +275,27 @@ video[autoplay][muted]::-webkit-media-controls { display: none !important; }
 video[autoplay][muted]::-moz-media-controls    { display: none !important; }
 video[autoplay][muted]::-ms-media-controls     { display: none !important; }
 
-/*==========================================================
-  Overlay Skip button
-==========================================================*/
-.DrawerContent--Fill { position: relative; }
-
-.SkipButton--Overlay {
+/* === Overlay Skip button (iOS-safe, wins cascade) === */
+.SkipButton.SkipButton--Overlay{
   position: absolute;
   z-index: 5;
-  /* inset from the actual video edge, with safe-area protection */
+
+  /* Always inset at least 30px; respect safe-area */
   right: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-right));
   bottom: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-bottom));
-  margin: 0;
+
+  /* Kill base margins & any auto stretching quirks */
+  margin: 0 !important;
+  width: auto;
+  height: auto;
+  display: block;
+  white-space: nowrap;
   -webkit-backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
   backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
 }
-.SkipButton--Overlay:hover  { background: rgba(255,255,255,0.26); }
-.SkipButton--Overlay:active { background: rgba(255,255,255,0.38); transform: scale(0.97); }
 
+/* Ensure the overlay anchors to the video container */
+.DrawerContent--Fill{ position: relative; }
 /*==========================================================
   Skip Button base
 ==========================================================*/
