@@ -1,66 +1,84 @@
 /*==========================================================
-  Design Tokens
+  Design Tokens / Global Constants
 ==========================================================*/
 :root{
-  /* Colors */
-  --ColorBackground: #0b0d10;
-  --ColorForeground: #e9edf1;
-  --ColorMuted:      #9aa6b2;
-  --ColorCard:       #12161b;      /* kept for future use */
-  --ColorAccent:     #48b0ff;
+  /* ---------------- Colors ---------------- */
+  --GlobalColorBackgroundDefaultHexValue:       #0b0d10;
+  --GlobalColorForegroundDefaultHexValue:       #e9edf1;
+  --GlobalColorMutedTextHexValue:               #9aa6b2;
+  --GlobalColorCardSurfaceHexValue:             #12161b;   /* reserved for future use */
+  --GlobalColorAccentPrimaryHexValue:           #48b0ff;
 
-  /* Layout */
-  --MaxWidth: 1100px;
-  --Radius:   12px;
-  --Gap:      12px;
+  /* ---------------- Layout ---------------- */
+  --GlobalMaximumContentWidthPixels:            1100px;
+  --GlobalGenericBorderRadiusPixels:            12px;
+  --GlobalGenericElementGapPixels:              12px;
 
-  /* Drawer behavior */
-  --DrawerCollapsedHeight:   2.75rem;  /* header height when collapsed */
-  --DrawerExpandedMaxHeight: 500px;    /* non-animated fallback max */
+  /* ---------------- Drawer Behavior ---------------- */
+  --DrawerCollapsedHeaderBarHeightRems:         2.75rem;   /* header height when collapsed */
+  --DrawerExpandedFallbackMaxHeightPixels:      500px;     /* max height if JS is off */
 
-  /* Animation & perf */
-  --AnimationDurationMs: 220ms;
-  --DrawerIntrinsicSize: 420px;        /* content-visibility size hint */
+  /* ---------------- Animation & Performance ---------------- */
+  --GlobalAnimationDurationMilliseconds:        220ms;
+  --DrawerContentIntrinsicSizePixels:           420px;     /* size hint for content-visibility */
 
-  /* Drawer color system (HSL base + per-drawer stepping) */
-  --DrawerHueBase:   210;   /* base hue to harmonize with bg */
-  --DrawerHueStep:     2;   /* hue shift per drawer (degrees) */
-  --DrawerSatBase:    18%;  /* base saturation */
-  --DrawerSatStep:     0%;  /* saturation change per drawer */
-  --DrawerLightBase:   7%;  /* top drawer lightness */
-  --DrawerLightStep:  3.5%; /* lightness increase per drawer */
+  /* ---------------- Drawer Color System (HSL base + stepping) ---------------- */
+  --DrawerTitleBarBaseHueDegrees:               210;   /* harmonizes with background */
+  --DrawerTitleBarHueStepPerDrawerDegrees:      2;
+  --DrawerTitleBarBaseSaturationPercent:        18%;
+  --DrawerTitleBarSaturationStepPerDrawerPct:   0%;
+  --DrawerTitleBarBaseLightnessPercent:         7%;
+  --DrawerTitleBarLightnessStepPerDrawerPct:    3.5%;
+
+  /* ---------------- Drawer Structural Constants ---------------- */
+  --DrawerBottomCornerBorderRadiusPixels:       16px;      /* rounded bottom for bars/panels */
+  --DrawerExpandedPanelExtraTailPaddingPixels:  16px;      /* extra padding below open content */
+  --DrawerHeaderTopSeamBorderColorRgba:         rgba(255,255,255,0.06);
+
+  --DrawerHeaderTitlePaddingVerticalRems:       0.875rem;
+  --DrawerHeaderTitlePaddingHorizontalRems:     1.125rem;
+
+  --DrawerContentPaddingHorizontalRems:         1rem;
+  --DrawerContentPaddingBottomRems:             1.5rem;    /* 24px */
+  --DrawerContentInternalGapRems:               0.75rem;
+
+  --DrawerStackedDrawerGapPixels:               0;         /* no visible gap between stacked bars */
+
+  /* ---------------- Video Overlay / Skip Button ---------------- */
+  --VideoOverlaySkipButtonInsetFromEdgePixels:  30px;
+  --VideoOverlaySkipButtonBackdropBlurPixels:   4px;
+
+  /* ---------------- Trigger Line Debug Visual ---------------- */
+  --ViewportAnchorTriggerLineThicknessPixels:   2px;
+  --ViewportAnchorTriggerLineColorHexValue:     #ffd400;
+
+  /* Keep this in sync with JS config ViewportAnchorFraction (0.35 = 35vh) */
+  --ViewportAnchorTriggerLinePositionVh:        35vh;
 }
-
 /*==========================================================
   Base / Resets
 ==========================================================*/
-*{ box-sizing: border-box; }
-html, body{ height: 100%; }
-html, body{ overflow-x: hidden; }     /* prevent 100vw scrollbars */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+html, body { overflow-x: hidden; }     /* prevent 100vw scrollbars */
 
-body{
+body {
   margin: 0;
-  color: var(--ColorForeground);
-  background: var(--ColorBackground);
+  color: var(--GlobalColorForegroundDefaultHexValue);
+  background: var(--GlobalColorBackgroundDefaultHexValue);
   font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
 /* =========================================
    Drawer Trigger Line (visual scroll marker)
    ========================================= */
-
-:root{
-  /* Keep this in sync with your JS threshold (0.35 → 35vh) */
-  --DrawerTriggerVH: 35vh;
-}
-
 .TriggerLine {
   position: fixed;
-  top: var(--DrawerTriggerVH, 35vh); /* 35% of viewport by default */
+  top: var(--ViewportAnchorTriggerLinePositionVh);
   left: 0;
   right: 0;
-  height: 2px;
-  background: #ffd400;
+  height: var(--ViewportAnchorTriggerLineThicknessPixels);
+  background: var(--ViewportAnchorTriggerLineColorHexValue);
   opacity: 0.7;
   z-index: 9999;
   pointer-events: none;
@@ -69,18 +87,18 @@ body{
 /*==========================================================
   Header
 ==========================================================*/
-.Header{
+.Header {
   background: #1a2027;
   color: #ffffff;
   padding: 1rem;
   text-align: center;
   border-bottom: 1px solid #0e141a;
 }
-.HeaderTitle{
+.HeaderTitle {
   margin: 0;
   font-size: clamp(1.5rem, 3.2vw, 2.4rem);
 }
-.HeaderSubtitle{
+.HeaderSubtitle {
   margin: 0.25rem 0 0;
   color: #cfd8e3;
 }
@@ -88,65 +106,56 @@ body{
 /*==========================================================
   Container (centered content; full-bleed drawers escape)
 ==========================================================*/
-.Container{
-  max-width: var(--MaxWidth);
+.Container {
+  max-width: var(--GlobalMaximumContentWidthPixels);
   margin: 2rem auto;
   padding: 0 1rem;
 }
-.SectionTitle{
+.SectionTitle {
   margin: 0 0 0.75rem 0;
   font-size: 1.25rem;
-  color: var(--ColorMuted);
+  color: var(--GlobalColorMutedTextHexValue);
 }
 
 /*==========================================================
-  Drawers (full-width containers)
-  - Title bar is visible (square top, rounded bottom)
-  - Each title bar lightens & hue-shifts progressively
+  Drawers
 ==========================================================*/
-
-/* Drawer block spans viewport (escapes centered container) */
-.Drawer{
+.Drawer {
   width: 100vw;
   margin-left: 50%;
   transform: translateX(-50%);
   max-width: none;
-
-  /* per-drawer step variable (used by the title bar) */
   --_step: 0;
-
   contain: paint; /* perf */
 }
 
 /* Stack tightly — next bar becomes the hard divider line */
-.Drawer + .Drawer{ margin-top: 0; }
+.Drawer + .Drawer { margin-top: var(--DrawerStackedDrawerGapPixels); }
 
 /* Progressive lighten + hue shift by order */
-.Container > [data-drawer]:nth-of-type(1){ --_step: 0; }
-.Container > [data-drawer]:nth-of-type(2){ --_step: 1; }
-.Container > [data-drawer]:nth-of-type(3){ --_step: 2; }
-.Container > [data-drawer]:nth-of-type(4){ --_step: 3; }
-.Container > [data-drawer]:nth-of-type(5){ --_step: 4; }
-/* add more lines as you add more drawers */
+.Container > [data-drawer]:nth-of-type(1) { --_step: 0; }
+.Container > [data-drawer]:nth-of-type(2) { --_step: 1; }
+.Container > [data-drawer]:nth-of-type(3) { --_step: 2; }
+.Container > [data-drawer]:nth-of-type(4) { --_step: 3; }
+.Container > [data-drawer]:nth-of-type(5) { --_step: 4; }
 
-/* ---------- Title Bar (always visible) ---------- */
-.DrawerTitle{
+/* ---------- Title Bar ---------- */
+.DrawerTitle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
+  gap: var(--DrawerContentInternalGapRems);
+  padding: var(--DrawerHeaderTitlePaddingVerticalRems) var(--DrawerHeaderTitlePaddingHorizontalRems);
   margin: 0;
-  min-height: var(--DrawerCollapsedHeight);
+  min-height: var(--DrawerCollapsedHeaderBarHeightRems);
   cursor: pointer;
   user-select: none;
   color: #fff;
 
-  /* per-drawer HSL gradient based on step */
-  --_h:  calc(var(--DrawerHueBase)   + var(--DrawerHueStep)   * var(--_step));
-  --_s:  calc(var(--DrawerSatBase)   + var(--DrawerSatStep)   * var(--_step));
-  --_l0: calc(var(--DrawerLightBase) + var(--DrawerLightStep) * var(--_step));       /* top */
-  --_l1: calc(var(--DrawerLightBase) + var(--DrawerLightStep) * var(--_step) + 2%);  /* bottom */
+  --_h:  calc(var(--DrawerTitleBarBaseHueDegrees)   + var(--DrawerTitleBarHueStepPerDrawerDegrees) * var(--_step));
+  --_s:  calc(var(--DrawerTitleBarBaseSaturationPercent)   + var(--DrawerTitleBarSaturationStepPerDrawerPct) * var(--_step));
+  --_l0: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step));
+  --_l1: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step) + 2%);
 
   background: linear-gradient(
     180deg,
@@ -154,108 +163,135 @@ body{
     hsl(var(--_h), var(--_s), var(--_l1)) 100%
   );
 
-  /* square top, rounded bottom */
-  border-radius: 0 0 16px 16px;
-
-  /* seam at top edge so stacked bars have a crisp line */
-  border-top: 1px solid rgba(255,255,255,0.06);
-
-  outline: none; /* rely on focus-visible */
+  border-radius: 0 0 var(--DrawerBottomCornerBorderRadiusPixels) var(--DrawerBottomCornerBorderRadiusPixels);
+  border-top: 1px solid var(--DrawerHeaderTopSeamBorderColorRgba);
+  outline: none;
 }
-.DrawerTitle:focus-visible{
-  outline: 2px solid var(--ColorAccent);
+.DrawerTitle:focus-visible {
+  outline: 2px solid var(--GlobalColorAccentPrimaryHexValue);
   outline-offset: 4px;
 }
 
-/* caret (if you render one) */
-.Caret{
+/* caret */
+.Caret {
   width: 1.25rem;
   height: 1.25rem;
-  transition: transform var(--AnimationDurationMs) ease;
+  transition: transform var(--GlobalAnimationDurationMilliseconds) ease;
 }
-.Drawer--Open .Caret{ transform: rotate(180deg); }
+.Drawer--Open .Caret { transform: rotate(180deg); }
 
-/* ---------- Drawer Content (collapsed by default) ---------- */
-.DrawerContent{
-  /* closed state defaults */
+/* ---------- Drawer Content ---------- */
+.DrawerContent {
   height: 0;
-  padding: 0;                /* closed = truly 0px tall */
-  overflow: clip;            /* hide while animating */
+  padding: 0;
+  overflow: clip;
   display: grid;
-  gap: 0.75rem;
+  gap: var(--DrawerContentInternalGapRems);
   color: #cdd6df;
 
-  /* perf hints */
   content-visibility: auto;
-  contain-intrinsic-size: var(--DrawerIntrinsicSize);
+  contain-intrinsic-size: var(--DrawerContentIntrinsicSizePixels);
 }
 
-/* Open state: add padding when visible */
-.Drawer--Open > .DrawerContent{
-  padding: 0 1rem 24px 1rem; /* readable padding for text sections */
+.Drawer--Open > .DrawerContent {
+  padding: 0 var(--DrawerContentPaddingHorizontalRems) var(--DrawerContentPaddingBottomRems) var(--DrawerContentPaddingHorizontalRems);
 }
 
-/* Open + Fill/Flush variants: keep edge-to-edge */
 .Drawer--Open > .DrawerContent.DrawerContent--Fill,
-.Drawer--Open > .DrawerContent.DrawerContent--Flush{
+.Drawer--Open > .DrawerContent.DrawerContent--Flush {
   padding: 0;
 }
 
-/*==========================================================
-  Fixed-height Video (width may overflow; clipped)
-==========================================================*/
+/* ---------- Drawer open panel background + rounded base ---------- */
+.Drawer--Open {
+  --_h:  calc(var(--DrawerTitleBarBaseHueDegrees)   + var(--DrawerTitleBarHueStepPerDrawerDegrees) * var(--_step));
+  --_s:  calc(var(--DrawerTitleBarBaseSaturationPercent)   + var(--DrawerTitleBarSaturationStepPerDrawerPct) * var(--_step));
+  --_l0: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step));
+  --_l1: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step) + 2%);
 
-/* Height presets on the drawer itself */
-.Drawer--FixedHero  { height: 100svh; height: 100vh; }
-.Drawer--FixedShort { height: 70svh;  height: 70vh;  }
+  background: linear-gradient(
+    180deg,
+    hsl(var(--_h), var(--_s), var(--_l0)) 0%,
+    hsl(var(--_h), var(--_s), var(--_l1)) 100%
+  );
 
-/* Make the content area fill that fixed drawer height */
-.Drawer--FixedHero  > .DrawerContent,
-.Drawer--FixedShort > .DrawerContent{
-  height: calc(100% - var(--DrawerCollapsedHeight));
+  border-radius: 0 0 var(--DrawerBottomCornerBorderRadiusPixels) var(--DrawerBottomCornerBorderRadiusPixels);
+  overflow: hidden;
+  padding-bottom: var(--DrawerExpandedPanelExtraTailPaddingPixels);
 }
 
-/* Fill video inside the content area — no letterboxing */
-.VideoFixed{
+.Drawer--Open > .DrawerTitle {
+  background: transparent;
+  border-top: 1px solid var(--DrawerHeaderTopSeamBorderColorRgba);
+  border-radius: 0;
+}
+
+.Drawer:not(.Drawer--Open) > .DrawerTitle {
+  --_h:  calc(var(--DrawerTitleBarBaseHueDegrees)   + var(--DrawerTitleBarHueStepPerDrawerDegrees) * var(--_step));
+  --_s:  calc(var(--DrawerTitleBarBaseSaturationPercent)   + var(--DrawerTitleBarSaturationStepPerDrawerPct) * var(--_step));
+  --_l0: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step));
+  --_l1: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step) + 2%);
+
+  background: linear-gradient(
+    180deg,
+    hsl(var(--_h), var(--_s), var(--_l0)) 0%,
+    hsl(var(--_h), var(--_s), var(--_l1)) 100%
+  );
+
+  border-radius: 0 0 var(--DrawerBottomCornerBorderRadiusPixels) var(--DrawerBottomCornerBorderRadiusPixels);
+}
+
+/*==========================================================
+  Fixed-height Video
+==========================================================*/
+.Drawer--FixedHero  { height: 100svh; height: 100vh; }
+.Drawer--FixedShort { height: 70svh;  height: 70vh; }
+
+.Drawer--FixedHero  > .DrawerContent,
+.Drawer--FixedShort > .DrawerContent {
+  height: calc(100% - var(--DrawerCollapsedHeaderBarHeightRems));
+  min-height: 0;
+}
+
+.VideoFixed {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;   /* crop sides to fill the frame */
+  object-fit: cover;
+  object-position: center;
   background: #000;
 }
 
-/* Suppress native controls UI completely */
 .VideoFixed::-webkit-media-controls { display: none !important; }
-.VideoFixed::-moz-media-controls { display: none !important; }
-.VideoFixed::-ms-media-controls { display: none !important; }
+.VideoFixed::-moz-media-controls    { display: none !important; }
+.VideoFixed::-ms-media-controls     { display: none !important; }
 
-/* Optional overlay Skip button that doesn't change layout height */
-.SkipButton--Overlay{
+/*==========================================================
+  Overlay Skip button
+==========================================================*/
+.DrawerContent--Fill { position: relative; }
+
+.SkipButton--Overlay {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 2;
+  z-index: 5;
+  right: calc(var(--VideoOverlaySkipButtonInsetFromEdgePixels) + env(safe-area-inset-right));
+  bottom: calc(var(--VideoOverlaySkipButtonInsetFromEdgePixels) + env(safe-area-inset-bottom));
+  margin: 0;
+  backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
 }
-
-/* To allow overlay positioning within the content area */
-.DrawerContent{ position: relative; }
-
-/* Slightly shorter heroes on very small phones */
-@media (max-width: 420px){
-  .Drawer--FixedHero  { height: 92svh; height: 92vh; }
-  .Drawer--FixedShort { height: 60svh; height: 60vh; }
-}
+.SkipButton--Overlay:hover  { background: rgba(255,255,255,0.26); }
+.SkipButton--Overlay:active { background: rgba(255,255,255,0.38); transform: scale(0.97); }
 
 /*==========================================================
   Skip Button base
 ==========================================================*/
-.SkipRow{
+.SkipRow {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 0.5rem;
 }
-.SkipButton{
+.SkipButton {
   position: relative;
   display: inline-block;
   margin-top: 0.5rem;
@@ -269,82 +305,34 @@ body{
   cursor: pointer;
   transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
 }
-.SkipButton:hover{  background: rgba(255,255,255,0.2); }
-.SkipButton:active{
+.SkipButton:hover { background: rgba(255,255,255,0.2); }
+.SkipButton:active {
   background: rgba(255,255,255,0.35);
   transform: scale(0.96);
 }
-.SkipButton:focus{ outline: none; }
-.SkipButton:focus-visible{
-  outline: 2px solid var(--ColorAccent);
+.SkipButton:focus { outline: none; }
+.SkipButton:focus-visible {
+  outline: 2px solid var(--GlobalColorAccentPrimaryHexValue);
   outline-offset: 3px;
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
-}
-
-/* ================================
-   Overlay Skip button on videos
-   ================================ */
-
-/* Ensure the content area can anchor absolute children */
-.DrawerContent--Fill {
-  position: relative;
-}
-
-/* Skip button floats over the video, 30px in from bottom-right.
-   Safe-area env() avoids clashing with iOS home indicator. */
-.SkipButton--Overlay {
-  position: absolute;
-  z-index: 5;
-  right: calc(30px + env(safe-area-inset-right));
-  bottom: calc(30px + env(safe-area-inset-bottom));
-  margin: 0;                 /* ignore flow margins */
-  backdrop-filter: blur(4px);
-}
-
-/* Optional: slightly stronger hover/press feedback when over video */
-.SkipButton--Overlay:hover  { background: rgba(255,255,255,0.26); }
-.SkipButton--Overlay:active { background: rgba(255,255,255,0.38); transform: scale(0.97); }
-
-/* Keep the video fill behavior consistent even when controls/end overlay show */
-.VideoFixed {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;         /* always fill (crop as needed) */
-  object-position: center;
-  background: #000;
-}
-
-/* If the browser tries to reserve space for controls, this maintains layout.
-   (Not all browsers need this, but it doesn't hurt.) */
-.Drawer--FixedHero  > .DrawerContent,
-.Drawer--FixedShort > .DrawerContent {
-  height: calc(100% - var(--DrawerCollapsedHeight));
-  min-height: 0;             /* prevent flex/grid min-content growth */
 }
 
 /*==========================================================
   Footer
 ==========================================================*/
-.Footer{
+.Footer {
   padding: 2rem 1rem;
   text-align: center;
-  color: var(--ColorMuted);
+  color: var(--GlobalColorMutedTextHexValue);
   border-top: 1px solid #11161b;
 }
 
 /*==========================================================
   Reduced Motion
 ==========================================================*/
-@media (prefers-reduced-motion: reduce){
-  .Caret{ transition: none !important; }
-
+@media (prefers-reduced-motion: reduce) {
+  .Caret { transition: none !important; }
   .DrawerContent,
-  .SkipButton{
-    transition: background 0.2s ease !important;
-  }
-
-  .SkipButton:active{
-    transform: none !important;
-  }
+  .SkipButton { transition: background 0.2s ease !important; }
+  .SkipButton:active { transform: none !important; }
 }
