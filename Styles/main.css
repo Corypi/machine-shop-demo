@@ -184,13 +184,21 @@ body {
 .DrawerContent {
   height: 0;
   padding: 0;
-  overflow: clip;
   display: grid;
   gap: var(--DrawerContentInternalGapRems);
   color: #cdd6df;
 
   content-visibility: auto;
   contain-intrinsic-size: var(--DrawerContentIntrinsicSizePixels);
+  will-change: height; /* smoother height anims */
+}
+
+/* Belt-and-suspenders overflow fallback */
+@supports not (overflow: clip) {
+  .DrawerContent { overflow: hidden; }
+}
+@supports (overflow: clip) {
+  .DrawerContent { overflow: clip; }
 }
 
 .Drawer--Open > .DrawerContent {
@@ -277,6 +285,7 @@ body {
   right: calc(var(--VideoOverlaySkipButtonInsetFromEdgePixels) + env(safe-area-inset-right));
   bottom: calc(var(--VideoOverlaySkipButtonInsetFromEdgePixels) + env(safe-area-inset-bottom));
   margin: 0;
+  -webkit-backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
   backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
 }
 .SkipButton--Overlay:hover  { background: rgba(255,255,255,0.26); }
