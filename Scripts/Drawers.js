@@ -1,30 +1,21 @@
 (function () {
   "use strict";
 
-  // ======================================================
-  // Configuration (no magic numbers; mirrors CSS constants)
-  // ======================================================
-
-  // Animation
-  var DrawerAnimationDurationInMilliseconds = 220;
-
-  // Behavior
-  var DrawerOnlyOneOpenAtATimeBoolean = true;
+  // ===== Configuration (no magic numbers) =====
+  var AnimationDurationMs = 220;
+  var OnlyOneOpenAtATime = true;
 
   // Auto open/close on scroll
-  var DrawerAutoOpenOnScrollEnabledBoolean = true;
-  var ViewportAnchorFractionFromTopForAutoOpen = 0.35; // 0.5 = center; 0.35 opens a bit before center
+  var AutoOpenOnScroll = true;
+  var ViewportAnchorFraction = 0.35; // 0.5 = center; 0.35 opens a bit before center
 
   // Debounce auto-open so it triggers after scrolling pauses
-  var DrawerPauseAutoOpenWhileScrollingBoolean = true;
-  var DrawerScrollIdleMilliseconds = 120;
+  var PauseAutoOpenWhileScrolling = true;
+  var ScrollIdleMs = 120;
 
-  // Which drawer should be open by default at page load?
-  // Use an element id (e.g., "Intro") or set to null to start with all closed.
-  var DrawerDefaultOpenDrawerElementIdOrNull = "Intro";
-
-  // CSS variable name to sync the yellow guide line position (must match your CSS)
-  var CssVariableViewportAnchorLinePosition = "--ViewportAnchorTriggerLinePositionVh";
+  // NEW: anti-flap controls
+  var SuppressMsAfterProgrammaticClose = 700; // time window where a just-closed drawer won't re-open
+  var HysteresisPx = 64; // when near the anchor, prefer the drawer in the direction of travel by this bias
 
   // ============================================
 
@@ -42,6 +33,10 @@
     this._scrollIdleTimerId = null;
     this._isScrollIdle = true;
 
+    // Scroll direction + suppression
+    this._lastScrollY = window.pageYOffset || 0;
+    this._now = function () { return (window.performance && performance.now) ? performance.now() : Date.now(); };
+
     this.Initialize();
   }
 
@@ -49,45 +44,22 @@
     this._drawers = this._root.querySelectorAll("[data-drawer]");
     this._summaries = this._root.querySelectorAll("[data-drawer-summary]");
 
-    // Wire events
     for (var i = 0; i < this._summaries.length; i++) {
       this._summaries[i].addEventListener("click", this.OnToggleRequested.bind(this));
       this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
     }
 
-    // Ensure only the chosen default drawer is open at boot
-    this._EnforceDefaultOpenDrawer();
+    // Ensure only Intro is open by default (leave any .Drawer--Open in HTML alone)
+    for (var j = 0; j < this._drawers.length; j++) {
+      var d = this._drawers[j];
+      if (d.id !== "Intro") d.classList.remove("Drawer--Open");
+    }
 
     this.SyncAria();
     this.SyncHeights();
 
-    if (DrawerAutoOpenOnScrollEnabledBoolean) {
+    if (AutoOpenOnScroll) {
       this.EnableScrollAutoToggle();
-    }
-  };
-
-  // ---------- Boot-time default open enforcement ----------
-
-  DrawerController.prototype._EnforceDefaultOpenDrawer = function () {
-    var openId = DrawerDefaultOpenDrawerElementIdOrNull;
-
-    // First close all
-    for (var i = 0; i < this._drawers.length; i++) {
-      this._drawers[i].classList.remove("Drawer--Open");
-      this.SetAriaExpanded(this._drawers[i], false);
-      var content = this._drawers[i].querySelector("[data-drawer-content]");
-      if (content) content.style.height = ""; // reset to collapsed 0 via CSS
-    }
-
-    // Then open the requested one (if present)
-    if (openId) {
-      var el = document.getElementById(openId);
-      if (el && el.hasAttribute("data-drawer")) {
-        el.classList.add("Drawer--Open");
-        this.SetAriaExpanded(el, true);
-        var c = el.querySelector("[data-drawer-content]");
-        if (c) c.style.height = c.scrollHeight + "px";
-      }
     }
   };
 
@@ -110,12 +82,10 @@
 
     var isOpen = drawer.classList.contains("Drawer--Open");
     if (isOpen) {
-      this.CloseDrawer(drawer);
+      this.CloseAndLock(drawer); // user-triggered close: lock briefly to avoid re-open flap
     } else {
       this.OpenDrawer(drawer);
-      if (DrawerOnlyOneOpenAtATimeBoolean) {
-        this.CloseSiblings(drawer);
-      }
+      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
   };
 
@@ -131,7 +101,6 @@
     this.SetAriaExpanded(drawer, true);
 
     var endHeight = content.scrollHeight;
-
     this.AnimateHeight(content, startHeight, endHeight);
   };
 
@@ -144,9 +113,24 @@
     drawer.classList.remove("Drawer--Open");
     this.SetAriaExpanded(drawer, false);
 
-    var endHeight = 0;
+    // Pause/rewind any videos inside this drawer
+    var vids = drawer.querySelectorAll("video");
+    for (var i = 0; i < vids.length; i++) {
+      try {
+        vids[i].pause();
+        // If you prefer not to rewind, remove the next line
+        vids[i].currentTime = 0;
+      } catch (e) {}
+    }
 
+    var endHeight = 0;
     this.AnimateHeight(content, startHeight, endHeight);
+  };
+
+  // Close + lockout to prevent immediate auto-reopen
+  DrawerController.prototype.CloseAndLock = function (drawer) {
+    this.CloseDrawer(drawer);
+    drawer.dataset.lockedUntil = String(this._now() + SuppressMsAfterProgrammaticClose);
   };
 
   DrawerController.prototype.CloseSiblings = function (exceptDrawer) {
@@ -165,7 +149,7 @@
 
     if (this._isAnimating) {
       element.style.transition = "";
-      element.style.height = endHeight > 0 ? endHeight + "px" : "";
+      element.style.height = endHeight > 0 ? (endHeight + "px") : "";
     }
 
     this._isAnimating = true;
@@ -173,7 +157,7 @@
     element.style.height = Math.max(0, startHeight) + "px";
     void element.offsetHeight;
 
-    element.style.transition = "height " + DrawerAnimationDurationInMilliseconds + "ms ease";
+    element.style.transition = "height " + AnimationDurationMs + "ms ease";
     element.style.height = Math.max(0, endHeight) + "px";
 
     function OnTransitionEnd(e) {
@@ -184,7 +168,6 @@
         } else {
           element.style.height = endHeight + "px";
         }
-
         element.removeEventListener("transitionend", OnTransitionEnd);
         self._isAnimating = false;
       }
@@ -198,7 +181,6 @@
       var drawer = this._drawers[i];
       var summary = drawer.querySelector("[data-drawer-summary]");
       if (!summary) continue;
-
       var isOpen = drawer.classList.contains("Drawer--Open");
       summary.setAttribute("aria-expanded", isOpen ? "true" : "false");
     }
@@ -206,9 +188,7 @@
 
   DrawerController.prototype.SetAriaExpanded = function (drawer, expanded) {
     var summary = drawer.querySelector("[data-drawer-summary]");
-    if (summary) {
-      summary.setAttribute("aria-expanded", expanded ? "true" : "false");
-    }
+    if (summary) summary.setAttribute("aria-expanded", expanded ? "true" : "false");
   };
 
   DrawerController.prototype.SyncHeights = function () {
@@ -230,43 +210,23 @@
   DrawerController.prototype.EnableScrollAutoToggle = function () {
     var self = this;
 
-    // IntersectionObserver helps keep state in sync if scroll events are throttled.
     if ("IntersectionObserver" in window) {
-      var options = {
-        root: null,
-        rootMargin: "0px",
-        threshold: this._BuildThresholds()
-      };
-      this._observer = new IntersectionObserver(function () {
-        self.OnScroll();
-      }, options);
-
-      for (var i = 0; i < this._summaries.length; i++) {
-        this._observer.observe(this._summaries[i]);
-      }
+      var options = { root: null, rootMargin: "0px", threshold: this._BuildThresholds() };
+      this._observer = new IntersectionObserver(function () { self.OnScroll(); }, options);
+      for (var i = 0; i < this._summaries.length; i++) this._observer.observe(this._summaries[i]);
     }
 
-    // Scroll / resize listeners with optional idle debounce
-    if (DrawerPauseAutoOpenWhileScrollingBoolean) {
-      window.addEventListener(
-        "scroll",
-        function () {
-          self._isScrollIdle = false;
-
-          if (self._scrollIdleTimerId) {
-            clearTimeout(self._scrollIdleTimerId);
-          }
-
-          self._scrollIdleTimerId = setTimeout(function () {
-            self._isScrollIdle = true;
-            self.OnScroll(); // run once when scrolling settles
-          }, DrawerScrollIdleMilliseconds);
-        },
-        { passive: true }
-      );
+    if (PauseAutoOpenWhileScrolling) {
+      window.addEventListener("scroll", function () {
+        self._isScrollIdle = false;
+        if (self._scrollIdleTimerId) clearTimeout(self._scrollIdleTimerId);
+        self._scrollIdleTimerId = setTimeout(function () {
+          self._isScrollIdle = true;
+          self.OnScroll(); // once when scrolling settles
+        }, ScrollIdleMs);
+      }, { passive: true });
 
       window.addEventListener("resize", function () {
-        // Treat resize as an immediate idle event to realign the anchor
         self._isScrollIdle = true;
         self.OnScroll();
       });
@@ -275,7 +235,6 @@
       window.addEventListener("resize", this.OnScroll.bind(this));
     }
 
-    // Initial alignment
     this.OnScroll();
   };
 
@@ -288,38 +247,50 @@
   DrawerController.prototype.OnScroll = function () {
     var self = this;
 
-    if (DrawerPauseAutoOpenWhileScrollingBoolean && !this._isScrollIdle) {
-      return;
-    }
-    if (this._scrollRafPending) {
-      return;
-    }
+    if (PauseAutoOpenWhileScrolling && !this._isScrollIdle) return;
+    if (this._scrollRafPending) return;
 
     this._scrollRafPending = true;
 
     window.requestAnimationFrame(function () {
       self._scrollRafPending = false;
       self.OpenClosestToViewportAnchor();
+      self._lastScrollY = window.pageYOffset || 0;
     });
   };
 
   DrawerController.prototype.OpenClosestToViewportAnchor = function () {
     var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-    var anchorY = viewportHeight * ViewportAnchorFractionFromTopForAutoOpen;
+    var anchorY = viewportHeight * ViewportAnchorFraction;
+
+    var scrollingDown = (window.pageYOffset || 0) > this._lastScrollY;
 
     var bestDrawer = null;
-    var bestDistance = Number.POSITIVE_INFINITY;
+    var bestScore = Number.POSITIVE_INFINITY;
+    var now = this._now();
 
     for (var i = 0; i < this._drawers.length; i++) {
       var drawer = this._drawers[i];
+
+      // Skip drawers in their suppression window
+      var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
+      if (lockedUntil > now) continue;
+
       var summary = drawer.querySelector("[data-drawer-summary]");
       if (!summary) continue;
 
-      var rect = summary.getBoundingClientRect();
-      var distance = Math.abs(rect.top - anchorY);
+      var dy = summary.getBoundingClientRect().top - anchorY; // negative = above anchor, positive = below
+      var base = Math.abs(dy);
 
-      if (distance < bestDistance) {
-        bestDistance = distance;
+      // Bias toward the drawer AHEAD of the scroll direction
+      var penalty = 0;
+      if (scrollingDown && dy < 0) penalty = HysteresisPx;        // it's behind you; penalize
+      if (!scrollingDown && dy > 0) penalty = HysteresisPx;
+
+      var score = base + penalty;
+
+      if (score < bestScore) {
+        bestScore = score;
         bestDrawer = drawer;
       }
     }
@@ -327,13 +298,9 @@
     if (!bestDrawer) return;
 
     var alreadyOpen = bestDrawer.classList.contains("Drawer--Open");
-    if (!alreadyOpen) {
-      this.OpenDrawer(bestDrawer);
-    }
+    if (!alreadyOpen) this.OpenDrawer(bestDrawer);
 
-    if (DrawerOnlyOneOpenAtATimeBoolean) {
-      this.CloseSiblings(bestDrawer);
-    }
+    if (OnlyOneOpenAtATime) this.CloseSiblings(bestDrawer);
   };
 
   // ---------- Public helpers ----------
@@ -343,18 +310,14 @@
     if (!drawer) return;
     if (!drawer.classList.contains("Drawer--Open")) {
       this.OpenDrawer(drawer);
-      if (DrawerOnlyOneOpenAtATimeBoolean) {
-        this.CloseSiblings(drawer);
-      }
+      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
   };
 
   DrawerController.prototype.CloseById = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
-    if (drawer.classList.contains("Drawer--Open")) {
-      this.CloseDrawer(drawer);
-    }
+    if (drawer.classList.contains("Drawer--Open")) this.CloseAndLock(drawer);
   };
 
   DrawerController.prototype.ScrollToDrawer = function (id) {
@@ -367,11 +330,9 @@
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     this.OpenById(openId);
-    this.CloseById(closeId);
+    this.CloseById(closeId); // locked close prevents auto-reopen
     this.ScrollToDrawer(openId);
   };
-
-  // ---------- Internal helpers ----------
 
   DrawerController.prototype._FindAncestorDrawer = function (node) {
     while (node && node !== document) {
@@ -384,18 +345,16 @@
   // ---------- Boot ----------
 
   function InitializeDrawersWhenReady() {
-    // Sync CSS variable so overlay line matches the JS anchor
+    // Sync CSS var so yellow guide matches the JS anchor
     document.documentElement.style.setProperty(
-      CssVariableViewportAnchorLinePosition,
-      (ViewportAnchorFractionFromTopForAutoOpen * 100) + "vh"
+      "--ViewportAnchorTriggerLinePositionVh",
+      (ViewportAnchorFraction * 100) + "vh"
     );
 
-    // Only add a yellow guide line if one doesn't already exist
-    if (!document.querySelector(".TriggerLine")) {
-      var guide = document.createElement("div");
-      guide.className = "TriggerLine";
-      document.body.appendChild(guide);
-    }
+    // Optional: keep the visual guide (comment these 3 lines to hide)
+    var guide = document.createElement("div");
+    guide.className = "TriggerLine";
+    document.body.appendChild(guide);
 
     var root = document;
     var instance = new DrawerController(root);
@@ -408,6 +367,6 @@
     InitializeDrawersWhenReady();
   }
 
-  // Expose class for advanced/manual control
   window.DrawerController = DrawerController;
+
 })();
