@@ -8,39 +8,26 @@
 </head>
 <body>
 
-  <!-- Toolbar / Dock -->
-  <button
-    class="ToolbarHandle"
-    id="ToolbarHandle"
-    aria-label="Toggle controls"
-    aria-expanded="true"
-    title="Hide controls">▴</button>
-
-  <div class="Toolbar" id="Toolbar">
-    <button class="ToolbarButton" data-nav-target="Intro">Intro</button>
-    <button class="ToolbarButton" data-nav-target="About">About</button>
-    <button class="ToolbarButton" data-nav-target="Tour">Tour</button>
-    <button class="ToolbarButton" data-nav-target="Capabilities">Capabilities</button>
-    <button class="ToolbarButton" data-nav-target="Contact">Contact</button>
-    <span class="ToolbarSpacer"></span>
-  </div>
-
-  <!-- Spacer so content clears the fixed toolbar -->
-  <div class="ToolbarPadder" aria-hidden="true"></div>
-
-  <!-- Header -->
+  <!-- ======================================================
+       Header
+  ======================================================= -->
   <header class="Header">
     <h1 class="HeaderTitle">Welcome to Our Machine Shop</h1>
     <p class="HeaderSubtitle">High-precision parts, modern capabilities.</p>
   </header>
 
+  <!-- ======================================================
+       Main
+  ======================================================= -->
   <main class="Container" id="Top">
     <h2 class="SectionTitle">Explore</h2>
 
-    <!-- Intro (full-bleed hero; open by default) -->
-    <section class="Drawer Drawer--Open FullBleed" id="Intro" data-drawer>
+    <!-- ====================================================
+         Intro (full-bleed hero; open by default)
+    ===================================================== -->
+    <section class="Drawer Drawer--Open" id="Intro" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">Intro</h3>
-      <div class="DrawerContent" data-drawer-content>
+      <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
         <video
           class="IntroVideo HeroViewport"
           src="../Assets/Movie_001.mp4"
@@ -51,17 +38,19 @@
           onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
         </video>
 
-        <div class="SkipRow">
-          <button
-            class="SkipButton"
-            onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+        <!-- keep a little padding for the skip button under the full-bleed video -->
+        <div class="SkipRow" style="padding: 0 1rem 1rem;">
+          <button class="SkipButton"
+                  onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
             Skip Intro
           </button>
         </div>
       </div>
     </section>
 
-    <!-- About -->
+    <!-- ====================================================
+         About
+    ===================================================== -->
     <section class="Drawer" id="About" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">About Us</h3>
       <div class="DrawerContent" data-drawer-content>
@@ -70,10 +59,12 @@
       </div>
     </section>
 
-    <!-- Shop Tour (full-bleed, shorter hero) -->
-    <section class="Drawer FullBleed" id="Tour" data-drawer>
+    <!-- ====================================================
+         Shop Tour (shorter hero)
+    ===================================================== -->
+    <section class="Drawer" id="Tour" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Shop Tour</h3>
-      <div class="DrawerContent" data-drawer-content>
+      <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
         <video
           class="IntroVideo HeroShort"
           src="../Assets/shop_tour.mp4"
@@ -81,11 +72,13 @@
           preload="metadata"
           playsinline>
         </video>
-        <p>Walkthrough of our machines, inspection, and finishing areas.</p>
+        <p style="padding: 0 1rem;">Walkthrough of our machines, inspection, and finishing areas.</p>
       </div>
     </section>
 
-    <!-- Capabilities -->
+    <!-- ====================================================
+         Capabilities
+    ===================================================== -->
     <section class="Drawer" id="Capabilities" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Capabilities</h3>
       <div class="DrawerContent" data-drawer-content>
@@ -98,7 +91,9 @@
       </div>
     </section>
 
-    <!-- Contact -->
+    <!-- ====================================================
+         Contact
+    ===================================================== -->
     <section class="Drawer" id="Contact" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Contact</h3>
       <div class="DrawerContent" data-drawer-content>
@@ -108,14 +103,17 @@
     </section>
   </main>
 
-  <!-- Footer -->
+  <!-- ======================================================
+       Footer
+  ======================================================= -->
   <footer class="Footer">
     <small>© <span id="Year"></span> Acme Precision • Demo</small>
   </footer>
 
-  <!-- Scripts -->
+  <!-- ======================================================
+       Scripts
+  ======================================================= -->
   <script src="../Scripts/Utilities.js"></script>
   <script src="../Scripts/Drawers.js"></script>
-  <script src="../Scripts/Toolbar.js"></script>
 </body>
 </html>
