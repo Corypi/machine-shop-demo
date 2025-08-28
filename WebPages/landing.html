@@ -28,15 +28,19 @@
     <section class="Drawer Drawer--Open" id="Intro" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">Intro</h3>
       <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
-        <video
-          class="IntroVideo HeroViewport"
-          src="../Assets/Movie_001.mp4"
-          autoplay
-          muted
-          playsinline
-          controls
-          onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
-        </video>
+
+        <!-- Fixed-height, width-overflow hero video -->
+        <div class="VideoFrame VideoFrame--Hero">
+          <video
+            class="VideoFixed"
+            src="../Assets/Movie_001.mp4"
+            autoplay
+            muted
+            playsinline
+            controls
+            onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+          </video>
+        </div>
 
         <!-- keep a little padding for the skip button under the full-bleed video -->
         <div class="SkipRow" style="padding: 0 1rem 1rem;">
@@ -65,13 +69,18 @@
     <section class="Drawer" id="Tour" data-drawer>
       <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Shop Tour</h3>
       <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
-        <video
-          class="IntroVideo HeroShort"
-          src="../Assets/shop_tour.mp4"
-          controls
-          preload="metadata"
-          playsinline>
-        </video>
+
+        <!-- Fixed-height, width-overflow short hero video -->
+        <div class="VideoFrame VideoFrame--Short">
+          <video
+            class="VideoFixed"
+            src="../Assets/shop_tour.mp4"
+            controls
+            preload="metadata"
+            playsinline>
+          </video>
+        </div>
+
         <p style="padding: 0 1rem;">Walkthrough of our machines, inspection, and finishing areas.</p>
       </div>
     </section>
