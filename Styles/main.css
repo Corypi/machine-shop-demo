@@ -346,6 +346,24 @@ body
   overflow: clip;
 }
 
+/* ===================================================== */
+/* Full-bleed utility for edge-to-edge sections           */
+/* ===================================================== */
+
+.FullBleed
+{
+  width: 100vw;                /* span viewport width */
+  margin-left: 50%;
+  transform: translateX(-50%); /* center relative to viewport */
+  max-width: none;             /* ignore container max-width */
+}
+
+.FullBleed video,
+.FullBleed img
+{
+  border-radius: 0;             /* square edges for true full bleed */
+}
+
 /* Reduced motion: remove scale on active press (toolbar + skip) */
 @media (prefers-reduced-motion: reduce)
 {
