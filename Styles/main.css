@@ -175,25 +175,29 @@ body{
 }
 .Drawer--Open .Caret{ transform: rotate(180deg); }
 
-/* ---------- Drawer Content (unrounded) ---------- */
+/* ---------- Drawer Content (collapsed by default) ---------- */
 .DrawerContent{
-  padding: 0 1rem 24px 1rem;  /* gentle LR padding for text sections */
+  /* closed state defaults */
+  height: 0;
+  padding: 0;                /* closed = truly 0px tall */
+  overflow: clip;            /* hide while animating */
   display: grid;
   gap: 0.75rem;
   color: #cdd6df;
 
-  /* fallback when JS is off */
-  max-height: var(--DrawerExpandedMaxHeight);
-
-  /* performance hints */
+  /* perf hints */
   content-visibility: auto;
   contain-intrinsic-size: var(--DrawerIntrinsicSize);
-  overflow: clip;
 }
 
-/* Remove padding (perfect for full-bleed / fixed-height media) */
-.DrawerContent--Flush,
-.DrawerContent--Fill{
+/* Open state: add padding when visible */
+.Drawer--Open > .DrawerContent{
+  padding: 0 1rem 24px 1rem; /* readable padding for text sections */
+}
+
+/* Open + Fill/Flush variants: keep edge-to-edge */
+.Drawer--Open > .DrawerContent.DrawerContent--Fill,
+.Drawer--Open > .DrawerContent.DrawerContent--Flush{
   padding: 0;
 }
 
