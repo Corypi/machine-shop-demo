@@ -68,7 +68,7 @@ body
   color: var(--ColorMuted);
 }
 
-/* Drawer */
+/* Drawer (original card styles — will be overridden below for full-width sections) */
 .Drawer
 {
   background: var(--ColorCard);
@@ -139,7 +139,7 @@ body
   overflow: clip;                            /* hide during height anim */
 }
 
-/* Respect reduced motion preferences */
+/* Respect reduced motion preferences (base) */
 @media (prefers-reduced-motion: reduce)
 {
   .Caret
@@ -162,18 +162,17 @@ body
 }
 
 /* ===================================================== */
-/* Intro drawer + Skip button styles (moved from inline) */
+/* Intro drawer + Skip button styles                     */
 /* ===================================================== */
 
 .IntroVideo
 {
   width: 100%;
-  height: auto;
-  max-height: 70vh;
+  height: 70vh;           /* fixed viewport height for a strong hero feel */
   display: block;
   border-radius: 8px;
   background: #000;
-  object-fit: cover;
+  object-fit: cover;      /* EDGE-TO-EDGE FILL (may crop) */
 }
 
 .SkipButton
@@ -223,16 +222,144 @@ body
   gap: 0.5rem;
 }
 
-/* Reduced motion: remove scale on active press */
+/* ===================================================== */
+/* Top Toolbar / Dock                                    */
+/* ===================================================== */
+
+.Toolbar
+{
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  transform: translateY(0);
+  transition: transform var(--AnimationDurationMs) ease-in-out;
+  will-change: transform;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.Toolbar--Hidden
+{
+  transform: translateY(-110%);
+}
+
+.ToolbarSpacer { flex: 1; }
+
+.ToolbarButton
+{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,0.5);
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  border-radius: 9999px;
+  padding: 6px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.ToolbarButton:hover { background: rgba(255,255,255,0.18); }
+.ToolbarButton:active { transform: scale(0.96); }
+.ToolbarButton:focus { outline: none; }
+.ToolbarButton:focus-visible
+{
+  outline: 2px solid var(--ColorAccent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
+}
+
+/* Drawer handle button (top-right chevron) */
+.ToolbarHandle
+{
+  position: fixed;
+  top: 8px; right: 12px;
+  z-index: 11;
+  width: 36px; height: 36px;
+  display: grid; place-items: center;
+  border-radius: 9999px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.6);
+  color: #fff;
+  cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease, opacity 150ms ease;
+}
+
+.ToolbarHandle:hover  { background: rgba(0,0,0,0.7); }
+.ToolbarHandle:active { transform: scale(0.96); }
+.ToolbarHandle:focus { outline: none; }
+.ToolbarHandle:focus-visible
+{
+  outline: 2px solid var(--ColorAccent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
+}
+
+/* Push main content below fixed toolbar */
+.ToolbarPadder
+{
+  height: 64px;
+}
+
+/* ===================================================== */
+/* Drawers as full-width sections                        */
+/* ===================================================== */
+
+/* Remove card chrome to feel like full-width pages */
+.Drawer
+{
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  margin-top: 0;
+  contain: paint;
+}
+
+.Drawer + .Drawer
+{
+  margin-top: 24px; /* breathing room between sections */
+}
+
+/* Keep for accessibility, hide visually; toolbar controls sections */
+.DrawerTitle
+{
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+
+.DrawerContent
+{
+  padding: 0 0 24px 0;   /* simpler vertical rhythm */
+  gap: 0.75rem;
+  color: #cdd6df;
+  max-height: var(--DrawerExpandedMaxHeight);
+  content-visibility: auto;
+  contain-intrinsic-size: var(--DrawerIntrinsicSize);
+  overflow: clip;
+}
+
+/* Reduced motion: remove scale on active press (toolbar + skip) */
 @media (prefers-reduced-motion: reduce)
 {
-  .SkipButton
+  .SkipButton,
+  .ToolbarButton,
+  .ToolbarHandle
   {
-    transition: background 0.2s ease;
+    transition: background 0.2s ease !important;
   }
 
-  .SkipButton:active
+  .SkipButton:active,
+  .ToolbarButton:active,
+  .ToolbarHandle:active
   {
-    transform: none;
+    transform: none !important;
   }
 }
