@@ -160,3 +160,79 @@ body
   color: var(--ColorMuted);
   border-top: 1px solid #11161b;
 }
+
+/* ===================================================== */
+/* Intro drawer + Skip button styles (moved from inline) */
+/* ===================================================== */
+
+.IntroVideo
+{
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  display: block;
+  border-radius: 8px;
+  background: #000;
+  object-fit: cover;
+}
+
+.SkipButton
+{
+  position: relative;
+  display: inline-block;
+  margin-top: 0.5rem;
+  margin-left: auto;
+  padding: 0.5rem 0.9rem;
+  font-weight: 700;
+  border: 2px solid #ffffff;
+  border-radius: 6px;
+  color: #ffffff;
+  background: rgba(0,0,0,0.55);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.SkipButton:hover
+{
+  background: rgba(255,255,255,0.2);
+}
+
+.SkipButton:active
+{
+  background: rgba(255,255,255,0.35);
+  transform: scale(0.96); /* subtle press effect */
+}
+
+.SkipButton:focus
+{
+  outline: none; /* rely on focus-visible ring below */
+}
+
+.SkipButton:focus-visible
+{
+  outline: 2px solid var(--ColorAccent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px rgba(72,176,255,0.25); /* soft halo for visibility */
+}
+
+.SkipRow
+{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Reduced motion: remove scale on active press */
+@media (prefers-reduced-motion: reduce)
+{
+  .SkipButton
+  {
+    transition: background 0.2s ease;
+  }
+
+  .SkipButton:active
+  {
+    transform: none;
+  }
+}
