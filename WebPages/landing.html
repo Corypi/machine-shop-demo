@@ -25,34 +25,28 @@
     <!-- ====================================================
          Intro (full-bleed hero; open by default)
     ===================================================== -->
-    <section class="Drawer Drawer--Open" id="Intro" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">Intro</h3>
-      <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
+   <section class="Drawer Drawer--Open Drawer--FixedHero" id="Intro" data-drawer>
+  <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">Intro</h3>
 
-        <!-- Fixed-height, width-overflow hero video -->
-       <div class="VideoFrame VideoFrame--Hero">
-  <video
-    class="VideoFixed"
-    src="../Assets/Movie_001.mp4"
-    autoplay
-    muted
-    playsinline
-    webkit-playsinline
-    controls
-    onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
-  </video>
+  <div class="DrawerContent DrawerContent--Fill" data-drawer-content>
+    <video
+      class="VideoFixed"
+      src="../Assets/Movie_001.mp4"
+      autoplay
+      muted
+      playsinline
+      webkit-playsinline
+      controls
+      onended="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+    </video>
 
-        </div>
-
-        <!-- keep a little padding for the skip button under the full-bleed video -->
-        <div class="SkipRow" style="padding: 0 1rem 1rem;">
-          <button class="SkipButton"
-                  onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
-            Skip Intro
-          </button>
-        </div>
-      </div>
-    </section>
+    <!-- Optional: overlay skip button so it doesn't change layout height -->
+    <button class="SkipButton SkipButton--Overlay"
+            onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+      Skip Intro
+    </button>
+  </div>
+</section>
 
     <!-- ====================================================
          About
@@ -68,26 +62,20 @@
     <!-- ====================================================
          Shop Tour (shorter hero)
     ===================================================== -->
-    <section class="Drawer" id="Tour" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Shop Tour</h3>
-      <div class="DrawerContent DrawerContent--Flush" data-drawer-content>
+    <section class="Drawer Drawer--FixedShort" id="Tour" data-drawer>
+  <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Shop Tour</h3>
 
-        <!-- Fixed-height, width-overflow short hero video -->
-       <div class="VideoFrame VideoFrame--Short">
-  <video
-    class="VideoFixed"
-    src="../Assets/shop_tour.mp4"
-    controls
-    preload="metadata"
-    playsinline
-    webkit-playsinline>
-  </video>
-
-        </div>
-
-        <p style="padding: 0 1rem;">Walkthrough of our machines, inspection, and finishing areas.</p>
-      </div>
-    </section>
+  <div class="DrawerContent DrawerContent--Fill" data-drawer-content>
+    <video
+      class="VideoFixed"
+      src="../Assets/shop_tour.mp4"
+      controls
+      preload="metadata"
+      playsinline
+      webkit-playsinline>
+    </video>
+  </div>
+</section>
 
     <!-- ====================================================
          Capabilities
