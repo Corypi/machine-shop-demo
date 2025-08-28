@@ -229,13 +229,13 @@ body{
   height: 70vh;
 }
 
-/* The video fills height; width is auto (may overflow) */
+/* The video fills the frame in both dimensions (no black bars) */
 .VideoFixed{
   display: block;
+  width: 100%;
   height: 100%;
-  width: auto;         /* keep aspect ratio */
-  margin: 0 auto;      /* center the overflowing width */
-  /* No object-fit needed; we’re driving size via height */
+  object-fit: cover;   /* crop as needed to fill */
+  background: #000;
 }
 
 /* If you ever want slightly shorter on small phones */
