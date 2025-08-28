@@ -270,9 +270,10 @@ body {
   background: #000;
 }
 
-.VideoFixed::-webkit-media-controls { display: none !important; }
-.VideoFixed::-moz-media-controls    { display: none !important; }
-.VideoFixed::-ms-media-controls     { display: none !important; }
+/* Hide native controls ONLY for autoplay+muted (e.g., Intro hero) */
+video[autoplay][muted]::-webkit-media-controls { display: none !important; }
+video[autoplay][muted]::-moz-media-controls    { display: none !important; }
+video[autoplay][muted]::-ms-media-controls     { display: none !important; }
 
 /*==========================================================
   Overlay Skip button
@@ -282,8 +283,9 @@ body {
 .SkipButton--Overlay {
   position: absolute;
   z-index: 5;
-  right: calc(var(--VideoOverlaySkipButtonInsetFromEdgePixels) + env(safe-area-inset-right));
-  bottom: calc(var(--VideoOverlaySkipButtonInsetFromEdgePixels) + env(safe-area-inset-bottom));
+  /* inset from the actual video edge, with safe-area protection */
+  right: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-right));
+  bottom: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-bottom));
   margin: 0;
   -webkit-backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
   backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
