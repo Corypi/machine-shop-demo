@@ -55,6 +55,7 @@
   /* Keep this in sync with JS config ViewportAnchorFraction (0.35 = 35vh) */
   --ViewportAnchorTriggerLinePositionVh:        35vh;
 }
+
 /*==========================================================
   Base / Resets
 ==========================================================*/
@@ -202,17 +203,14 @@ body {
 }
 
 /* Belt-and-suspenders overflow fallback */
-@supports not (overflow: clip) {
-  .DrawerContent { overflow: hidden; }
-}
-@supports (overflow: clip) {
-  .DrawerContent { overflow: clip; }
-}
+@supports not (overflow: clip) { .DrawerContent { overflow: hidden; } }
+@supports (overflow: clip)     { .DrawerContent { overflow: clip; } }
 
 .Drawer--Open > .DrawerContent {
   padding: 0 var(--DrawerContentPaddingHorizontalRems) var(--DrawerContentPaddingBottomRems) var(--DrawerContentPaddingHorizontalRems);
 }
 
+/* Fill / Flush variants remove padding entirely */
 .Drawer--Open > .DrawerContent.DrawerContent--Fill,
 .Drawer--Open > .DrawerContent.DrawerContent--Flush {
   padding: 0;
@@ -253,25 +251,18 @@ body {
   --_s:  calc(var(--DrawerTitleBarBaseSaturationPercent)   + var(--DrawerTitleBarSaturationStepPerDrawerPct) * var(--_step));
   --_l0: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step));
   --_l1: calc(var(--DrawerTitleBarBaseLightnessPercent) + var(--DrawerTitleBarLightnessStepPerDrawerPct) * var(--_step) + 2%);
-
-  background: linear-gradient(
-    180deg,
-    hsl(var(--_h), var(--_s), var(--_l0)) 0%,
-    hsl(var(--_h), var(--_s), var(--_l1)) 100%
-  );
-
+  background: linear-gradient(180deg, hsl(var(--_h), var(--_s), var(--_l0)) 0%, hsl(var(--_h), var(--_s), var(--_l1)) 100%);
   border-radius: 0 0 var(--DrawerBottomCornerBorderRadiusPixels) var(--DrawerBottomCornerBorderRadiusPixels);
 }
 
 /*==========================================================
-  Fixed-height Video
+  Fixed-height Video (applies only while open)
 ==========================================================*/
-/* Disabled legacy fixed-height on the drawer itself
+/* Disabled legacy fixed-height on the drawer itself */
+/*
 .Drawer--FixedHero  { height: 100svh; height: 100vh; }
 .Drawer--FixedShort { height: 70svh;  height: 70vh;  }
 */
-
-
 
 /* Apply clamped video height only while the drawer is open */
 .Drawer--Open.Drawer--FixedHero  > .DrawerContent{
@@ -282,51 +273,19 @@ body {
   height: clamp(48dvh, calc(100vw * 9 / 16), 70dvh);
 }
 
-/* No extra panel tail when the content is “fill” (class added via JS) */
+/* If an open drawer contains a fill content block, remove the panel tail */
 .Drawer--Open.Drawer--NoTail{ padding-bottom: 0; }
 
-/* Keep the overlay anchored to the content box */
-.DrawerContent--Fill { position: relative; }
-
-/* If an open drawer contains a fill content block, remove the panel tail
-   – works even if JS didn't add Drawer--NoTail */
-.Drawer--Open:has(> .DrawerContent.DrawerContent--Fill){
-  padding-bottom: 0 !important;
+/* Allow the video to truly fill the content height (avoid grid sizing quirks) */
+.DrawerContent--Fill {
+  display: block;        /* override grid; fixes % heights on child */
+  position: relative;    /* anchor overlay */
+  overflow: hidden;      /* clip overlay/video bleed */
+  padding: 0;
+  min-height: 0;
 }
 
-/* Clip the overlay to the video box and make it the positioning context */
-.DrawerContent--Fill{ position: relative; overflow: hidden; }
-
-/* Kill the open-panel tail on any fixed-video drawers (and for NoTail flag) */
-.Drawer--Open.Drawer--FixedHero,
-.Drawer--Open.Drawer--FixedShort,
-.Drawer--Open.Drawer--NoTail{
-  padding-bottom: 0 !important; /* override the base .Drawer--Open tail */
-}
-
-/* Video wrapper: positioned box that the video & overlay button live in */
-.VideoWrapper{
-  position: relative;   /* anchor for absolute overlay */
-  width: 100%;
-  height: 100%;         /* inherits the clamped height from DrawerContent */
-  overflow: hidden;     /* no bleed beyond */
-}
-
-/* Ensure the video truly fills the wrapper height */
-.VideoWrapper > .VideoFixed{
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-}
-
-/* Keep the overlay comfortably in from the edge (a bit less than 30px) */
-.SkipButton.SkipButton--Overlay{
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
-}
-
+/* Video fills the content box height */
 .VideoFixed {
   display: block;
   width: 100%;
@@ -336,13 +295,13 @@ body {
   background: #000;
 }
 
-/* Hide native controls ONLY for autoplay+muted (e.g., Intro hero) */
-video[autoplay][muted]::-webkit-media-controls { display: none !important; }
-video[autoplay][muted]::-moz-media-controls    { display: none !important; }
-video[autoplay][muted]::-ms-media-controls     { display: none !important; }
+/* Remove the open-panel tail whenever the content is a fill block */
+.Drawer--Open:has(> .DrawerContent.DrawerContent--Fill){
+  padding-bottom: 0 !important;
+}
 
 /*==========================================================
-  Skip Button base
+  Skip Button (base + overlay)
 ==========================================================*/
 .SkipRow {
   display: flex;
@@ -365,10 +324,7 @@ video[autoplay][muted]::-ms-media-controls     { display: none !important; }
   transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
 }
 .SkipButton:hover { background: rgba(255,255,255,0.2); }
-.SkipButton:active {
-  background: rgba(255,255,255,0.35);
-  transform: scale(0.96);
-}
+.SkipButton:active { background: rgba(255,255,255,0.35); transform: scale(0.96); }
 .SkipButton:focus { outline: none; }
 .SkipButton:focus-visible {
   outline: 2px solid var(--GlobalColorAccentPrimaryHexValue);
@@ -376,16 +332,12 @@ video[autoplay][muted]::-ms-media-controls     { display: none !important; }
   box-shadow: 0 0 0 3px rgba(72,176,255,0.25);
 }
 
-/* === Overlay Skip button (iOS-safe, wins cascade) === */
+/* Overlay variant — single decisive rule (iOS safe-area aware) */
 .SkipButton.SkipButton--Overlay{
   position: absolute;
   z-index: 5;
-
-  /* Always inset at least 30px; respect safe-area */
   right: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-right));
   bottom: max(var(--VideoOverlaySkipButtonInsetFromEdgePixels), env(safe-area-inset-bottom));
-
-  /* Kill base margins & any auto stretching quirks */
   margin: 0 !important;
   width: auto;
   height: auto;
@@ -395,6 +347,10 @@ video[autoplay][muted]::-ms-media-controls     { display: none !important; }
   backdrop-filter: blur(var(--VideoOverlaySkipButtonBackdropBlurPixels));
 }
 
+/* Hide native controls ONLY for autoplay+muted (e.g., Intro hero) */
+video[autoplay][muted]::-webkit-media-controls { display: none !important; }
+video[autoplay][muted]::-moz-media-controls    { display: none !important; }
+video[autoplay][muted]::-ms-media-controls     { display: none !important; }
 
 /*==========================================================
   Footer
@@ -416,7 +372,7 @@ video[autoplay][muted]::-ms-media-controls     { display: none !important; }
   .SkipButton:active { transform: none !important; }
 }
 
-/* ===== DEBUG ONLY ===== */
+/* ===== DEBUG ONLY (optional; remove when happy) ===== */
 [data-drawer-content].DrawerContent--Fill { outline: 2px solid #00e5ff; }   /* cyan = content box */
 .VideoFixed                                { outline: 2px solid #ff3b30; }   /* red = actual video */
 .SkipButton--Overlay                       { outline: 2px solid #ffd400; }   /* yellow = button */
