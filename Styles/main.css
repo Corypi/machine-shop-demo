@@ -252,13 +252,34 @@ body {
 /*==========================================================
   Fixed-height Video
 ==========================================================*/
+/* Disabled legacy fixed-height on the drawer itself
 .Drawer--FixedHero  { height: 100svh; height: 100vh; }
-.Drawer--FixedShort { height: 70svh;  height: 70vh; }
+.Drawer--FixedShort { height: 70svh;  height: 70vh;  }
+*/
 
-.Drawer--FixedHero  > .DrawerContent,
-.Drawer--FixedShort > .DrawerContent {
-  height: calc(100% - var(--DrawerCollapsedHeaderBarHeightRems));
+/* Full hero: content owns the height (16:9 preference, capped to viewport) */
+.Drawer--FixedHero > .DrawerContent{
+  height: clamp(
+    70svh,                                           /* min */
+    calc(100vw * 9 / 16),                            /* prefer 16:9 from viewport width */
+    100svh                                           /* max */
+  );
+  min-height: 0;                                     /* avoid min-content growth */
+}
+
+/* Short hero: clamp by aspect; content owns the height */
+.Drawer--FixedShort > .DrawerContent{
+  height: clamp(
+    48svh,                                            /* min */
+    calc(100vw * 9 / 16),                             /* prefer 16:9 from viewport width */
+    70svh                                             /* max (your old target) */
+  );
   min-height: 0;
+}
+
+/* When an open drawer contains a fill (video) content block, remove panel tail */
+.Drawer--Open:has(> .DrawerContent.DrawerContent--Fill){
+  padding-bottom: 0;
 }
 
 .VideoFixed {
