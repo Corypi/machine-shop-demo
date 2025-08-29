@@ -265,6 +265,8 @@ body {
 .Drawer--FixedShort { height: 70svh;  height: 70vh;  }
 */
 
+
+
 /* Apply clamped video height only while the drawer is open */
 .Drawer--Open.Drawer--FixedHero  > .DrawerContent{
   height: clamp(70dvh, calc(100vw * 9 / 16), 100dvh);
@@ -279,6 +281,12 @@ body {
 
 /* Keep the overlay anchored to the content box */
 .DrawerContent--Fill { position: relative; }
+
+/* If an open drawer contains a fill content block, remove the panel tail
+   – works even if JS didn't add Drawer--NoTail */
+.Drawer--Open:has(> .DrawerContent.DrawerContent--Fill){
+  padding-bottom: 0 !important;
+}
 
 .VideoFixed {
   display: block;
