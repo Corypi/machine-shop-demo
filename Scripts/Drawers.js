@@ -189,32 +189,53 @@
   // ---------- Animation + ARIA ----------
 
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
-    var self = this;
+  var self = this;
 
-    if (this._isAnimating) {
-      element.style.transition = "";
-      element.style.height = endHeight > 0 ? (endHeight + "px") : "";
-    }
+  // ---- viewport pin: capture the docY of the 35% line before we mutate ----
+  var vh = window.innerHeight || document.documentElement.clientHeight;
+  var anchorDocYBefore = (window.pageYOffset || document.documentElement.scrollTop || 0)
+                       + vh * ViewportAnchorFraction;
 
-    this._isAnimating = true;
+  // If another animation is in-flight, snap to its end state first
+  if (this._isAnimating) {
+    element.style.transition = "";
+    element.style.height = endHeight > 0 ? (endHeight + "px") : "";
+  }
 
-    element.style.height = Math.max(0, startHeight) + "px";
-    void element.offsetHeight;
+  this._isAnimating = true;
 
-    element.style.transition = "height " + AnimationDurationMs + "ms ease";
-    element.style.height = Math.max(0, endHeight) + "px";
+  element.style.height = Math.max(0, startHeight) + "px";
+  void element.offsetHeight; // force reflow
 
-    function OnTransitionEnd(e) {
-      if (e.propertyName === "height") {
-        element.style.transition = "";
-        element.style.height = endHeight > 0 ? (endHeight + "px") : "";
-        element.removeEventListener("transitionend", OnTransitionEnd);
-        self._isAnimating = false;
+  element.style.transition = "height " + AnimationDurationMs + "ms ease";
+  element.style.height = Math.max(0, endHeight) + "px";
+
+  function onEnd(e) {
+    if (e.propertyName !== "height") return;
+
+    // Clean up transition + final explicit height
+    element.style.transition = "";
+    element.style.height = endHeight > 0 ? (endHeight + "px") : "";
+
+    element.removeEventListener("transitionend", onEnd);
+    self._isAnimating = false;
+
+    // ---- viewport pin: restore the docY of the 35% line after layout settled ----
+    // Use rAF to ensure layout has fully committed.
+    window.requestAnimationFrame(function () {
+      var anchorDocYAfter = (window.pageYOffset || document.documentElement.scrollTop || 0)
+                          + (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction;
+
+      var delta = anchorDocYAfter - anchorDocYBefore;
+      if (Math.abs(delta) > 0.5) {
+        // Scroll back by the delta to keep the 35% line visually fixed
+        window.scrollBy(0, -delta);
       }
-    }
+    });
+  }
 
-    element.addEventListener("transitionend", OnTransitionEnd);
-  };
+  element.addEventListener("transitionend", onEnd);
+};
 
   DrawerController.prototype.SyncAria = function () {
     for (var i = 0; i < this._drawers.length; i++) {
