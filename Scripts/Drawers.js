@@ -62,6 +62,20 @@
       if (c) c.style.height = "";
     }
 
+    // *** NEW: open Intro immediately so there’s no flash of 'all closed' ***
+    var intro = document.getElementById("Intro");
+    if (intro) {
+      var introContent = intro.querySelector("[data-drawer-content]");
+      // tail state for fill content
+      if (introContent && introContent.classList.contains("DrawerContent--Fill")) {
+        intro.classList.add("Drawer--NoTail");
+      }
+      intro.classList.add("Drawer--Open");
+      this.SetAriaExpanded(intro, true);
+      // let open panels breathe (JS height anim will use 'auto' later)
+      if (introContent) introContent.style.height = "auto";
+    }
+
     // Inject close markers at end of each content
     this._InstallCloseMarkers();
 
@@ -175,7 +189,7 @@
 
   // ---------- Animation + ARIA ----------
 
-  // Drop-in: animates to px, then sets auto for open state; pins the 35% line
+  // Animates to px, then sets auto for open state; pins the 35% line
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
     var self = this;
 
@@ -267,14 +281,13 @@
     }
   };
 
-  // NEW: keep an open drawer growing if its media finishes sizing later
+  // Keep an open drawer flexible if media sizes later
   DrawerController.prototype._wireMediaAutoGrow = function (content) {
     var medias = content.querySelectorAll("video, img, iframe");
     function maybeSync() {
       var d = content.closest("[data-drawer]");
       if (!d || !d.classList.contains("Drawer--Open")) return;
-      // We keep height:auto while open, so nothing to enforce here.
-      // If you ever want to lock pixels after growth: content.style.height = content.scrollHeight + "px";
+      // We keep height:auto while open, so growth is natural.
     }
     for (var i = 0; i < medias.length; i++) {
       var m = medias[i];
@@ -328,7 +341,7 @@
 
     for (var idx = 0; idx < entries.length; idx++) {
       var entry = entries[idx];
-      if (!entry.isIntersecting) continue;      // only when entering the slice
+      if (!entry.isIntersecting) continue;       // only when entering the slice
       if (this._scrollDirection !== 1) continue; // unidirectional (down only)
 
       var target = entry.target;
@@ -424,7 +437,7 @@
     var instance = new DrawerController(document);
     window.DrawersController = instance;
 
-    // After layout, open INTRO and start its video (without IO fighting it)
+    // After layout, ensure Intro is open (if not already) and start its video
     var openIntro = function () {
       var intro = document.getElementById("Intro");
       if (!intro) {
@@ -432,10 +445,12 @@
         return;
       }
 
-      // suppress IO briefly so it doesn't fight this programmatic open
+      // suppress IO briefly so it doesn't fight this programmatic work
       instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
 
-      instance.OpenById("Intro");
+      if (!intro.classList.contains("Drawer--Open")) {
+        instance.OpenById("Intro");
+      }
 
       // try to play the hero video (muted/inline)
       var vid = intro.querySelector("video");
