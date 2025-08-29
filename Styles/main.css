@@ -369,6 +369,10 @@ video[autoplay][muted]::-ms-media-controls     { display: none !important; }
   .SkipButton:active { transform: none !important; }
 }
 
+html {
+  overflow-anchor: none; /* let JS control anchoring during drawer anims */
+}
+
 /* ===== DEBUG ONLY (optional; remove when happy) ===== */
 [data-drawer-content].DrawerContent--Fill { outline: 2px solid #00e5ff; }   /* cyan = content box */
 .VideoFixed                                { outline: 2px solid #ff3b30; }   /* red = actual video */
