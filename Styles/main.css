@@ -257,30 +257,20 @@ body {
 .Drawer--FixedShort { height: 70svh;  height: 70vh;  }
 */
 
-/* Full hero: content owns the height (16:9 preference, capped to viewport) */
-.Drawer--FixedHero > .DrawerContent{
-  height: clamp(
-    70svh,                                           /* min */
-    calc(100vw * 9 / 16),                            /* prefer 16:9 from viewport width */
-    100svh                                           /* max */
-  );
-  min-height: 0;                                     /* avoid min-content growth */
-}
-
-/* Short hero: clamp by aspect; content owns the height */
-.Drawer--FixedShort > .DrawerContent{
-  height: clamp(
-    48svh,                                            /* min */
-    calc(100vw * 9 / 16),                             /* prefer 16:9 from viewport width */
-    70svh                                             /* max (your old target) */
-  );
+/* Apply clamped video height only while the drawer is open */
+.Drawer--Open.Drawer--FixedHero  > .DrawerContent{
+  height: clamp(70svh, calc(100vw * 9 / 16), 100svh);
   min-height: 0;
 }
-
-/* When an open drawer contains a fill (video) content block, remove panel tail */
-.Drawer--Open:has(> .DrawerContent.DrawerContent--Fill){
-  padding-bottom: 0;
+.Drawer--Open.Drawer--FixedShort > .DrawerContent{
+  height: clamp(48svh, calc(100vw * 9 / 16), 70svh);
 }
+
+/* No extra panel tail when the content is “fill” (class added via JS) */
+.Drawer--Open.Drawer--NoTail{ padding-bottom: 0; }
+
+/* Keep the overlay anchored to the content box */
+.DrawerContent--Fill { position: relative; }
 
 .VideoFixed {
   display: block;
