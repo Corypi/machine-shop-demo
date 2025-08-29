@@ -120,15 +120,15 @@ body {
 }
 
 /* Add space *inside* the main content flow, before first drawer & after last */
-.Container::before,
+/*.Container::before,*/
 .Container::after{
   content: "";
   display: block;
 }
 
-.Container::before{
+/*.Container::before{
   height: var(--ScrollAnchorTopBufferVh);    /* top headroom */
-}
+}*/
 
 .Container::after{
   height: var(--ScrollAnchorBottomBufferVh); /* bottom tailroom */
