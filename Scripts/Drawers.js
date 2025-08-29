@@ -7,7 +7,7 @@
 
   // Auto open/close on scroll
   var AutoOpenOnScroll = true;
-  var ViewportAnchorFraction = 0.35; // 0.5 = center; 0.35 opens a bit before center
+  var ViewportAnchorFraction = 0.35; // 0.5 = center; 0.35 is 35% from top
 
   // Debounce auto-open so it triggers after scrolling pauses
   var PauseAutoOpenWhileScrolling = true;
@@ -15,10 +15,11 @@
 
   // Anti-flap controls
   var SuppressMsAfterProgrammaticClose = 700; // just-closed shouldn't re-open
-  var CenterDeadbandPx = 24;                  // kept (unused in bottom logic; safe to remove later)
 
-  // Bottom-anchor tuning
-  var CloseOvershootPx = 12;                  // allow a small ± window at the content bottom
+  // IO at a virtual "line" = 35% from top. -35% top margin, -65% bottom margin.
+  // Any target that touches that horizontal slice will trigger the observer.
+  var RootMarginForAnchor = (-(ViewportAnchorFraction * 100)).toFixed(3) + "% 0px " +
+                            (-(100 - ViewportAnchorFraction * 100)).toFixed(3) + "% 0px";
 
   // ============================================
 
@@ -28,7 +29,6 @@
 
     this._drawers = null;
     this._summaries = null;
-
     this._observer = null;
     this._scrollRafPending = false;
 
@@ -36,7 +36,12 @@
     this._scrollIdleTimerId = null;
     this._isScrollIdle = true;
 
-    this._now = function () { return (window.performance && performance.now) ? performance.now() : Date.now(); };
+    // Direction tracking
+    this._lastScrollY = window.pageYOffset || 0;
+
+    this._now = function () {
+      return (window.performance && performance.now) ? performance.now() : Date.now();
+    };
 
     this.Initialize();
   }
@@ -50,16 +55,34 @@
       this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
     }
 
-    // Ensure only #Intro is open at boot (leave it open if present)
+    // Ensure only #Intro is open initially
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       if (d.id !== "Intro") d.classList.remove("Drawer--Open");
     }
 
+    // Inject close markers (one per drawer, at the very end of content)
+    this._InstallCloseMarkers();
+
     this.SyncAria();
     this.SyncHeights();
 
     if (AutoOpenOnScroll) this.EnableScrollAutoToggle();
+  };
+
+  DrawerController.prototype._InstallCloseMarkers = function () {
+    for (var i = 0; i < this._drawers.length; i++) {
+      var d = this._drawers[i];
+      var content = d.querySelector("[data-drawer-content]");
+      if (!content) continue;
+
+      if (!content.querySelector("[data-close-marker]")) {
+        var marker = document.createElement("div");
+        marker.setAttribute("data-close-marker", "");
+        marker.style.cssText = "position:relative;height:1px;width:1px;pointer-events:none;";
+        content.appendChild(marker);
+      }
+    }
   };
 
   // ---------- Interaction ----------
@@ -157,8 +180,7 @@
     function OnTransitionEnd(e) {
       if (e.propertyName === "height") {
         element.style.transition = "";
-        if (endHeight === 0) element.style.height = "";
-        else element.style.height = endHeight + "px";
+        element.style.height = endHeight > 0 ? (endHeight + "px") : "";
         element.removeEventListener("transitionend", OnTransitionEnd);
         self._isAnimating = false;
       }
@@ -196,130 +218,107 @@
     }
   };
 
-  // ---------- Auto open/close on scroll (BOTTOM-of-content anchor) ----------
+  // ---------- Auto open/close on scroll via "lines" (IO at 35%) ----------
 
   DrawerController.prototype.EnableScrollAutoToggle = function () {
     var self = this;
 
-    if ("IntersectionObserver" in window) {
-      var options = { root: null, rootMargin: "0px", threshold: this._BuildThresholds() };
-      this._observer = new IntersectionObserver(function () { self.OnScroll(); }, options);
-      for (var i = 0; i < this._summaries.length; i++) this._observer.observe(this._summaries[i]);
+    // Observe at the virtual 35% line using rootMargin trick
+    this._observer = new IntersectionObserver(function (entries) {
+      self._OnIntersections(entries);
+    }, {
+      root: null,
+      threshold: 0,
+      rootMargin: RootMarginForAnchor
+    });
+
+    // Observe each open marker (summary) and each close marker (content end)
+    for (var i = 0; i < this._drawers.length; i++) {
+      var d = this._drawers[i];
+      var summary = d.querySelector("[data-drawer-summary]");
+      var closeMarker = d.querySelector("[data-close-marker]");
+      if (summary) this._observer.observe(summary);
+      if (closeMarker) this._observer.observe(closeMarker);
     }
 
-    if (PauseAutoOpenWhileScrolling) {
-      window.addEventListener("scroll", function () {
+    // Scroll/resize debouncing + direction tracking
+    var onScroll = function () {
+      var y = window.pageYOffset || 0;
+      self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : 0;
+      self._lastScrollY = y;
+
+      if (PauseAutoOpenWhileScrolling) {
         self._isScrollIdle = false;
         if (self._scrollIdleTimerId) clearTimeout(self._scrollIdleTimerId);
         self._scrollIdleTimerId = setTimeout(function () {
           self._isScrollIdle = true;
-          self.OnScroll();
         }, ScrollIdleMs);
-      }, { passive: true });
+      }
+    };
 
-      window.addEventListener("resize", function () {
-        self._isScrollIdle = true;
-        self.OnScroll();
-      });
-    } else {
-      window.addEventListener("scroll", this.OnScroll.bind(this), { passive: true });
-      window.addEventListener("resize", this.OnScroll.bind(this));
-    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
 
-    this.OnScroll();
+    // Initial direction seed
+    this._scrollDirection = 1;
   };
 
-  DrawerController.prototype._BuildThresholds = function () {
-    var thresholds = [];
-    for (var i = 0; i <= 20; i++) thresholds.push(i / 20);
-    return thresholds;
-  };
-
-  DrawerController.prototype.OnScroll = function () {
-    var self = this;
+  DrawerController.prototype._OnIntersections = function (entries) {
     if (PauseAutoOpenWhileScrolling && !this._isScrollIdle) return;
-    if (this._scrollRafPending) return;
 
-    this._scrollRafPending = true;
+    var now = this._now();
+    var self = this;
 
-    window.requestAnimationFrame(function () {
-      self._scrollRafPending = false;
-      self.EvaluateByBottomAnchor();
-    });
-  };
+    // Sort by time to process in order
+    entries.sort(function (a, b) { return a.time - b.time; });
 
-  // Close when 35% anchor reaches the bottom of the OPEN drawer's content (±tolerance),
-// then open the next drawer. Otherwise, ensure the first drawer whose (predicted)
-// bottom is still below the anchor is open.
-DrawerController.prototype.EvaluateByBottomAnchor = function () {
-  var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-  var anchorY = viewportHeight * ViewportAnchorFraction;
-  var now = this._now();
+    entries.forEach(function (entry) {
+      // We only act when target *enters* the 35% slice (isIntersecting = true).
+      if (!entry.isIntersecting) return;
 
-  // Build list of drawer geometry + a "bottomForOpenLogic" that works even when closed
-  var list = [];
-  for (var i = 0; i < this._drawers.length; i++) {
-    var d = this._drawers[i];
-    var content = d.querySelector("[data-drawer-content]");
-    var summary = d.querySelector("[data-drawer-summary]") || d;
-    if (!content) continue;
+      // We only act when scrolling **down** so behavior is unidirectional
+      if (self._scrollDirection !== 1) return;
 
-    var isOpen = d.classList.contains("Drawer--Open");
-    var contentRect = content.getBoundingClientRect();
-    var summaryRect = summary.getBoundingClientRect();
+      var target = entry.target;
+      var drawer = target.closest("[data-drawer]");
+      if (!drawer) return;
 
-    // If closed, the DOM bottom == summary bottom. Predict where the real bottom would be:
-    var predictedBottomWhenClosed = summaryRect.bottom + content.scrollHeight;
-    var bottomForOpenLogic = isOpen ? contentRect.bottom : predictedBottomWhenClosed;
+      // Respect lockout
+      var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
+      if (lockedUntil > now) return;
 
-    list.push({
-      node: d,
-      isOpen: isOpen,
-      contentRect: contentRect,
-      summaryRect: summaryRect,
-      bottomForOpenLogic: bottomForOpenLogic,
-      lockedUntil: parseFloat(d.dataset.lockedUntil || "0")
-    });
-  }
-  if (!list.length) return;
-
-  // 1) If an open drawer's bottom has reached/passed the anchor, close it and open the next
-  for (var j = 0; j < list.length; j++) {
-    var item = list[j];
-    if (!item.isOpen) continue;
-
-    if (anchorY >= (item.bottomForOpenLogic - CloseOvershootPx)) {
-      // Close and lock current
-      this.CloseAndLock(item.node);
-
-      // Open next (if any and not locked)
-      var nextIdx = j + 1;
-      if (nextIdx < list.length) {
-        var next = list[nextIdx];
-        if (next.lockedUntil <= now && !next.node.classList.contains("Drawer--Open")) {
-          this.OpenDrawer(next.node);
-          if (OnlyOneOpenAtATime) this.CloseSiblings(next.node);
+      if (target.hasAttribute("data-drawer-summary")) {
+        // OPEN MARKER crossed the line → open this drawer
+        if (!drawer.classList.contains("Drawer--Open")) {
+          self.OpenDrawer(drawer);
+          if (OnlyOneOpenAtATime) self.CloseSiblings(drawer);
+        }
+      } else if (target.hasAttribute("data-close-marker")) {
+        // CLOSE MARKER (content bottom) crossed the line → close this and open next
+        if (drawer.classList.contains("Drawer--Open")) {
+          self.CloseAndLock(drawer);
+          var next = self._NextDrawer(drawer);
+          if (next) {
+            var lockedNext = parseFloat(next.dataset.lockedUntil || "0");
+            if (lockedNext <= now && !next.classList.contains("Drawer--Open")) {
+              self.OpenDrawer(next);
+              if (OnlyOneOpenAtATime) self.CloseSiblings(next);
+            }
+          }
         }
       }
-      return; // handled this frame
-    }
-  }
+    });
+  };
 
-  // 2) Otherwise, ensure the first drawer whose (predicted) bottom is still below the anchor is open
-  for (var k = 0; k < list.length; k++) {
-    var it = list[k];
-    if (it.lockedUntil > now) continue;
-
-    if (anchorY < (it.bottomForOpenLogic - CloseOvershootPx)) {
-      if (!it.node.classList.contains("Drawer--Open")) {
-        this.OpenDrawer(it.node);
-        if (OnlyOneOpenAtATime) this.CloseSiblings(it.node);
+  DrawerController.prototype._NextDrawer = function (drawer) {
+    for (var i = 0; i < this._drawers.length; i++) {
+      if (this._drawers[i] === drawer) {
+        return (i + 1 < this._drawers.length) ? this._drawers[i + 1] : null;
       }
-      return;
     }
-  }
-  // If we get here, anchor is below all bottoms; nothing to open.
-};
+    return null;
+  };
+
   // ---------- Public helpers ----------
 
   DrawerController.prototype.OpenById = function (id) {
@@ -368,7 +367,7 @@ DrawerController.prototype.EvaluateByBottomAnchor = function () {
       (ViewportAnchorFraction * 100) + "vh"
     );
 
-    // (Optional) keep the visual guide line
+    // Optional: keep the visual guide
     var guide = document.createElement("div");
     guide.className = "TriggerLine";
     document.body.appendChild(guide);
