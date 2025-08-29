@@ -16,14 +16,13 @@
   // Anti-flap
   var SuppressMsAfterProgrammaticClose = 250;
 
-  // State machine thresholds (tiny hysteresis so IO jitter can't flap)
-  var OpenThresholdPx  = 8;   // when the 35% line passes a title by ≥ this, allow open
-  var CloseThresholdPx = 8;   // when the 35% line passes a close-marker by ≥ this, allow close
-
   // IO at a virtual "line" = 35% from top
   var RootMarginForAnchor =
     (-(ViewportAnchorFraction * 100)).toFixed(3) + "% 0px " +
     (-(100 - ViewportAnchorFraction * 100)).toFixed(3) + "% 0px";
+
+  // Suppress IO reactions briefly during boot/programmatic open
+  var SuppressIOAfterBootMs = 400;
 
   // ============================================
 
@@ -37,10 +36,11 @@
 
     // Direction tracking
     this._lastScrollY = window.pageYOffset || 0;
-
-    // Finite state: index of the drawer we consider “active”
-    this._activeIndex = 0; // will be set in Initialize()
     this._scrollDirection = 1; // seed as "down"
+
+    // Boot/IO suppression
+    this._booting = true;
+    this._suppressIOUntil = 0;
 
     this._now = function () {
       return (window.performance && performance.now) ? performance.now() : Date.now();
@@ -58,40 +58,21 @@
       this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
     }
 
-    // Leave only #Intro open if present
+    // *** New: start EVERYTHING closed (ignore whatever HTML had) ***
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
-      if (d.id !== "Intro") d.classList.remove("Drawer--Open");
+      d.classList.remove("Drawer--Open", "Drawer--NoTail");
+      var c = d.querySelector("[data-drawer-content]");
+      if (c) c.style.height = "";
     }
-
-    // Ensure already-open drawers get the proper tail state
-    this._applyNoTailForOpenDrawers();
 
     // Inject close markers at end of each content
     this._InstallCloseMarkers();
 
-    this._ApplyNoTailOnFill();
     this.SyncAria();
     this.SyncHeights();
 
-    // Set initial active index to the first open drawer (default Intro)
-    this._activeIndex = this._findInitiallyOpenIndex();
-    if (OnlyOneOpenAtATime) this._openOnly(this._activeIndex);
-
     if (AutoOpenOnScroll) this.EnableScrollAutoToggle();
-  };
-
-  DrawerController.prototype._applyNoTailForOpenDrawers = function () {
-    for (var i = 0; i < this._drawers.length; i++) {
-      var d = this._drawers[i];
-      var c = d.querySelector("[data-drawer-content]");
-      if (!c) continue;
-      if (d.classList.contains("Drawer--Open") && c.classList.contains("DrawerContent--Fill")) {
-        d.classList.add("Drawer--NoTail");
-      } else {
-        d.classList.remove("Drawer--NoTail");
-      }
-    }
   };
 
   DrawerController.prototype._InstallCloseMarkers = function () {
@@ -118,64 +99,58 @@
     }
   };
 
-  // keep state in sync & enforce only-one-open
   DrawerController.prototype.OnToggleRequested = function (evt) {
     if (this._isAnimating) return;
     var summary = evt.currentTarget;
     var drawer = summary.closest ? summary.closest("[data-drawer]") : this._FindAncestorDrawer(summary);
     if (!drawer) return;
 
-    var idx = this._indexOf(drawer);
-    if (idx < 0) return;
-
     if (drawer.classList.contains("Drawer--Open")) {
       this.CloseAndLock(drawer);
-      if (idx === this._activeIndex) this._activeIndex = this._prevIndex(idx);
     } else {
-      if (OnlyOneOpenAtATime) this._openOnly(idx);
-      else this.OpenDrawer(drawer);
+      this.OpenDrawer(drawer);
+      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
   };
 
   // ---------- Programmatic open/close ----------
 
   DrawerController.prototype.OpenDrawer = function (drawer) {
-  var content = drawer.querySelector("[data-drawer-content]");
-  if (!content) return;
+    var content = drawer.querySelector("[data-drawer-content]");
+    if (!content) return;
 
-  // Tail state for fill content
-  if (content.classList.contains("DrawerContent--Fill")) {
-    drawer.classList.add("Drawer--NoTail");
-  } else {
-    drawer.classList.remove("Drawer--NoTail");
-  }
+    // Tail state for fill content
+    if (content.classList.contains("DrawerContent--Fill")) {
+      drawer.classList.add("Drawer--NoTail");
+    } else {
+      drawer.classList.remove("Drawer--NoTail");
+    }
 
-  var startHeight = content.getBoundingClientRect().height;
+    var startHeight = content.getBoundingClientRect().height;
 
-  drawer.classList.add("Drawer--Open");
-  this.SetAriaExpanded(drawer, true);
+    drawer.classList.add("Drawer--Open");
+    this.SetAriaExpanded(drawer, true);
 
-  // Let layout settle, then measure the *real* rendered height
-  var self = this;
-  requestAnimationFrame(function () {
-    var endHeight = content.getBoundingClientRect().height;
-    self.AnimateHeight(content, startHeight, endHeight);
-  });
+    // Measure after layout
+    var self = this;
+    requestAnimationFrame(function () {
+      var endHeight = content.getBoundingClientRect().height;
+      self.AnimateHeight(content, startHeight, endHeight);
+    });
 
-  // If there’s a video, re-sync once metadata gives us final dimensions
-  var vid = content.querySelector("video");
-  if (vid) {
-    var onMeta = function () {
-      // re-measure only if still open
-      if (drawer.classList.contains("Drawer--Open")) {
-        var h = content.getBoundingClientRect().height;
-        content.style.height = h + "px";
-      }
-      vid.removeEventListener("loadedmetadata", onMeta);
-    };
-    vid.addEventListener("loadedmetadata", onMeta, { once: true });
-  }
-};
+    // If there’s a video, re-sync height when metadata arrives
+    var vid = content.querySelector("video");
+    if (vid) {
+      var onMeta = function () {
+        if (drawer.classList.contains("Drawer--Open")) {
+          var h = content.getBoundingClientRect().height;
+          content.style.height = h + "px";
+        }
+        vid.removeEventListener("loadedmetadata", onMeta);
+      };
+      vid.addEventListener("loadedmetadata", onMeta, { once: true });
+    }
+  };
 
   DrawerController.prototype.CloseDrawer = function (drawer) {
     var content = drawer.querySelector("[data-drawer-content]");
@@ -268,46 +243,13 @@
         } else {
           drawer.classList.remove("Drawer--NoTail");
         }
+        // lock to actual rendered height, not scrollHeight
         content.style.height = content.getBoundingClientRect().height + "px";
       } else {
         drawer.classList.remove("Drawer--NoTail");
         content.style.height = "";
       }
     }
-  };
-
-  // ---------- State helpers ----------
-
-  DrawerController.prototype._findInitiallyOpenIndex = function () {
-    for (var i = 0; i < this._drawers.length; i++) {
-      if (this._drawers[i].classList.contains("Drawer--Open")) return i;
-    }
-    return 0;
-  };
-
-  DrawerController.prototype._indexOf = function (drawer) {
-    for (var i = 0; i < this._drawers.length; i++) if (this._drawers[i] === drawer) return i;
-    return -1;
-  };
-
-  DrawerController.prototype._openOnly = function (idx) {
-    if (idx < 0 || idx >= this._drawers.length) return;
-    for (var i = 0; i < this._drawers.length; i++) {
-      if (i === idx) {
-        if (!this._drawers[i].classList.contains("Drawer--Open")) this.OpenDrawer(this._drawers[i]);
-      } else {
-        if (this._drawers[i].classList.contains("Drawer--Open")) this.CloseDrawer(this._drawers[i]);
-      }
-    }
-    this._activeIndex = idx;
-  };
-
-  DrawerController.prototype._nextIndex = function (idx) {
-    return (idx + 1 < this._drawers.length) ? idx + 1 : idx;
-  };
-
-  DrawerController.prototype._prevIndex = function (idx) {
-    return (idx - 1 >= 0) ? idx - 1 : idx;
   };
 
   // ---------- Auto open/close on scroll via "line" (IO at 35%) ----------
@@ -333,7 +275,7 @@
       if (closeMarker) this._observer.observe(closeMarker);
     }
 
-    // Direction tracking only (no idle gating)
+    // Direction tracking only
     function onScroll() {
       var y = window.pageYOffset || 0;
       self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : self._scrollDirection;
@@ -343,20 +285,19 @@
     window.addEventListener("resize", onScroll);
   };
 
-  // Stable state-machine IO handler (down-only by design)
   DrawerController.prototype._OnIntersections = function (entries) {
+    var now = this._now();
+
+    // ignore during boot/programmatic open suppression
+    if (this._booting || now < this._suppressIOUntil) return;
+
     // process in chronological order
     entries.sort(function (a, b) { return a.time - b.time; });
 
-    var now = this._now();
-    var dir = this._scrollDirection || 1; // 1=down, -1=up
-    if (dir !== 1) return; // unidirectional (down only)
-
-    var anchorY = (window.innerHeight || document.documentElement.clientHeight) * (ViewportAnchorFraction || 0.35);
-
-    for (var i = 0; i < entries.length; i++) {
-      var entry = entries[i];
-      if (!entry.isIntersecting) continue; // only when entering the slice
+    for (var idx = 0; idx < entries.length; idx++) {
+      var entry = entries[idx];
+      if (!entry.isIntersecting) continue;      // only when entering the slice
+      if (this._scrollDirection !== 1) continue; // unidirectional (down only)
 
       var target = entry.target;
       var drawer = target.closest("[data-drawer]");
@@ -366,29 +307,22 @@
       var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
       if (lockedUntil > now) continue;
 
-      var idx = this._indexOf(drawer);
-      if (idx < 0) continue;
-
-      // Only allow transitions to the current active or its immediate next
-      var canAdvanceDown = (idx === this._activeIndex || idx === this._activeIndex + 1);
-
-      var rect = target.getBoundingClientRect();
-
-      if (target.hasAttribute("data-drawer-summary")) {
-        // title row; compare its bottom to the anchor with hysteresis
-        if (!canAdvanceDown) continue;
-        if ((rect.bottom - anchorY) >= OpenThresholdPx) {
-          this._openOnly(idx);
-          return; // single state change per batch
+      if (target.matches("[data-drawer-summary]")) {
+        if (!drawer.classList.contains("Drawer--Open")) {
+          this.OpenDrawer(drawer);
+          if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
         }
-      } else if (target.hasAttribute("data-close-marker")) {
-        // content-bottom marker; compare its top to the anchor with hysteresis
-        if (idx !== this._activeIndex) continue;
-        if ((anchorY - rect.top) >= CloseThresholdPx) {
-          var next = this._nextIndex(idx);
+      } else if (target.matches("[data-close-marker]")) {
+        if (drawer.classList.contains("Drawer--Open")) {
           this.CloseAndLock(drawer);
-          this._openOnly(next);
-          return;
+          var next = this._NextDrawer(drawer);
+          if (next) {
+            var lockedNext = parseFloat(next.dataset.lockedUntil || "0");
+            if (lockedNext <= now && !next.classList.contains("Drawer--Open")) {
+              this.OpenDrawer(next);
+              if (OnlyOneOpenAtATime) this.CloseSiblings(next);
+            }
+          }
         }
       }
     }
@@ -408,12 +342,9 @@
   DrawerController.prototype.OpenById = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
-    var idx = this._indexOf(drawer);
     if (!drawer.classList.contains("Drawer--Open")) {
-      if (OnlyOneOpenAtATime) this._openOnly(idx);
-      else this.OpenDrawer(drawer);
-    } else if (OnlyOneOpenAtATime) {
-      this._openOnly(idx);
+      this.OpenDrawer(drawer);
+      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
   };
 
@@ -445,17 +376,6 @@
     return null;
   };
 
-  DrawerController.prototype._ApplyNoTailOnFill = function () {
-    for (var i = 0; i < this._drawers.length; i++) {
-      var d = this._drawers[i];
-      var content = d.querySelector("[data-drawer-content]");
-      if (!content) continue;
-      if (content.classList.contains("DrawerContent--Fill")) {
-        d.classList.add("Drawer--NoTail"); // kill the open-panel tail for fill content
-      }
-    }
-  };
-
   // ---------- Boot ----------
 
   function InitializeDrawersWhenReady() {
@@ -464,12 +384,41 @@
       (ViewportAnchorFraction * 100) + "vh"
     );
 
-    // Debug guide line (optional)
+    // Optional: visual guide line
     var guide = document.createElement("div");
     guide.className = "TriggerLine";
     document.body.appendChild(guide);
 
-    window.DrawersController = new DrawerController(document);
+    var instance = new DrawerController(document);
+    window.DrawersController = instance;
+
+    // *** New: after layout, open INTRO and start its video ***
+    var openIntro = function () {
+      var intro = document.getElementById("Intro");
+      if (!intro) return;
+
+      // suppress IO briefly so it doesn't fight this programmatic open
+      instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
+
+      instance.OpenById("Intro");
+
+      // try to play the hero video (muted/inline)
+      var vid = intro.querySelector("video");
+      if (vid) {
+        try {
+          vid.muted = true;
+          vid.playsInline = true;
+          var p = vid.play();
+          if (p && typeof p.catch === "function") { p.catch(function(){ /* ignore */ }); }
+        } catch(e) { /* ignore play errors */ }
+      }
+
+      // release boot flag after a tick so IO can take over
+      setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
+    };
+
+    // Wait two RAFs so styles/layout (including video CSS) settle
+    requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
   }
 
   if (document.readyState === "loading") {
