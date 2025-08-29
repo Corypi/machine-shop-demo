@@ -62,7 +62,7 @@
 
     // Inject close markers at end of each content
     this._InstallCloseMarkers();
-
+    this._ApplyNoTailOnFill();
     this.SyncAria();
     this.SyncHeights();
 
@@ -361,6 +361,17 @@
     }
     return null;
   };
+  
+  DrawerController.prototype._ApplyNoTailOnFill = function () {
+  for (var i = 0; i < this._drawers.length; i++) {
+    var d = this._drawers[i];
+    var content = d.querySelector("[data-drawer-content]");
+    if (!content) continue;
+    if (content.classList.contains("DrawerContent--Fill")) {
+      d.classList.add("Drawer--NoTail"); // kill the open-panel tail for fill content
+    }
+  }
+};
 
   // ---------- Boot ----------
 
