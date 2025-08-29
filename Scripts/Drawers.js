@@ -62,19 +62,7 @@
       if (c) c.style.height = "";
     }
 
-    // *** NEW: open Intro immediately so there’s no flash of 'all closed' ***
-    var intro = document.getElementById("Intro");
-    if (intro) {
-      var introContent = intro.querySelector("[data-drawer-content]");
-      // tail state for fill content
-      if (introContent && introContent.classList.contains("DrawerContent--Fill")) {
-        intro.classList.add("Drawer--NoTail");
-      }
-      intro.classList.add("Drawer--Open");
-      this.SetAriaExpanded(intro, true);
-      // let open panels breathe (JS height anim will use 'auto' later)
-      if (introContent) introContent.style.height = "auto";
-    }
+    
 
     // Inject close markers at end of each content
     this._InstallCloseMarkers();
@@ -424,10 +412,53 @@
   // ---------- Boot ----------
 
   function InitializeDrawersWhenReady() {
-    document.documentElement.style.setProperty(
-      "--ViewportAnchorTriggerLinePositionVh",
-      (ViewportAnchorFraction * 100) + "vh"
-    );
+  document.documentElement.style.setProperty(
+    "--ViewportAnchorTriggerLinePositionVh",
+    (ViewportAnchorFraction * 100) + "vh"
+  );
+
+  // Optional: visual guide line
+  var guide = document.createElement("div");
+  guide.className = "TriggerLine";
+  document.body.appendChild(guide);
+
+  var instance = new DrawerController(document);
+  window.DrawersController = instance;
+
+  // Single authoritative "open Intro" (IO temporarily suppressed)
+  function openIntro() {
+    var intro = document.getElementById("Intro");
+    if (!intro) {
+      instance._booting = false;
+      return;
+    }
+
+    // Keep IO quiet while we do this programmatically
+    instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
+
+    // Open using the controller (ensures height/ARIA/tail are correct)
+    instance.OpenById("Intro");
+
+    // Try to play the hero video (muted/inline)
+    var vid = intro.querySelector("video");
+    if (vid) {
+      try {
+        vid.muted = true;
+        vid.playsInline = true;
+        var p = vid.play();
+        if (p && typeof p.catch === "function") p.catch(function () {});
+      } catch (e) {}
+    }
+
+    // Release boot flag so IO takes over naturally
+    setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
+  }
+
+  // Wait two RAFs so CSS/layout (including video sizing rules) have committed
+  requestAnimationFrame(function () {
+    requestAnimationFrame(openIntro);
+  });
+}
 
     // Optional: visual guide line
     var guide = document.createElement("div");
