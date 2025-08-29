@@ -16,6 +16,10 @@
   // Anti-flap
   var SuppressMsAfterProgrammaticClose = 250;
 
+  // State machine thresholds (tiny hysteresis so IO jitter can't flap)
+  var OpenThresholdPx  = 8;   // when the 35% line passes a title by ≥ this, allow open
+  var CloseThresholdPx = 8;   // when the 35% line passes a close-marker by ≥ this, allow close
+
   // IO at a virtual "line" = 35% from top
   var RootMarginForAnchor =
     (-(ViewportAnchorFraction * 100)).toFixed(3) + "% 0px " +
@@ -33,6 +37,9 @@
 
     // Direction tracking
     this._lastScrollY = window.pageYOffset || 0;
+
+    // Finite state: index of the drawer we consider “active”
+    this._activeIndex = 0; // will be set in Initialize()
     this._scrollDirection = 1; // seed as "down"
 
     this._now = function () {
@@ -62,9 +69,14 @@
 
     // Inject close markers at end of each content
     this._InstallCloseMarkers();
+
     this._ApplyNoTailOnFill();
     this.SyncAria();
     this.SyncHeights();
+
+    // Set initial active index to the first open drawer (default Intro)
+    this._activeIndex = this._findInitiallyOpenIndex();
+    if (OnlyOneOpenAtATime) this._openOnly(this._activeIndex);
 
     if (AutoOpenOnScroll) this.EnableScrollAutoToggle();
   };
@@ -106,17 +118,22 @@
     }
   };
 
+  // keep state in sync & enforce only-one-open
   DrawerController.prototype.OnToggleRequested = function (evt) {
     if (this._isAnimating) return;
     var summary = evt.currentTarget;
     var drawer = summary.closest ? summary.closest("[data-drawer]") : this._FindAncestorDrawer(summary);
     if (!drawer) return;
 
+    var idx = this._indexOf(drawer);
+    if (idx < 0) return;
+
     if (drawer.classList.contains("Drawer--Open")) {
       this.CloseAndLock(drawer);
+      if (idx === this._activeIndex) this._activeIndex = this._prevIndex(idx);
     } else {
-      this.OpenDrawer(drawer);
-      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
+      if (OnlyOneOpenAtATime) this._openOnly(idx);
+      else this.OpenDrawer(drawer);
     }
   };
 
@@ -241,6 +258,40 @@
     }
   };
 
+  // ---------- State helpers ----------
+
+  DrawerController.prototype._findInitiallyOpenIndex = function () {
+    for (var i = 0; i < this._drawers.length; i++) {
+      if (this._drawers[i].classList.contains("Drawer--Open")) return i;
+    }
+    return 0;
+  };
+
+  DrawerController.prototype._indexOf = function (drawer) {
+    for (var i = 0; i < this._drawers.length; i++) if (this._drawers[i] === drawer) return i;
+    return -1;
+  };
+
+  DrawerController.prototype._openOnly = function (idx) {
+    if (idx < 0 || idx >= this._drawers.length) return;
+    for (var i = 0; i < this._drawers.length; i++) {
+      if (i === idx) {
+        if (!this._drawers[i].classList.contains("Drawer--Open")) this.OpenDrawer(this._drawers[i]);
+      } else {
+        if (this._drawers[i].classList.contains("Drawer--Open")) this.CloseDrawer(this._drawers[i]);
+      }
+    }
+    this._activeIndex = idx;
+  };
+
+  DrawerController.prototype._nextIndex = function (idx) {
+    return (idx + 1 < this._drawers.length) ? idx + 1 : idx;
+  };
+
+  DrawerController.prototype._prevIndex = function (idx) {
+    return (idx - 1 >= 0) ? idx - 1 : idx;
+  };
+
   // ---------- Auto open/close on scroll via "line" (IO at 35%) ----------
 
   DrawerController.prototype.EnableScrollAutoToggle = function () {
@@ -274,44 +325,55 @@
     window.addEventListener("resize", onScroll);
   };
 
+  // Stable state-machine IO handler (down-only by design)
   DrawerController.prototype._OnIntersections = function (entries) {
-    var now = this._now();
-    var self = this;
-
     // process in chronological order
     entries.sort(function (a, b) { return a.time - b.time; });
 
-    entries.forEach(function (entry) {
-      if (!entry.isIntersecting) return;         // only when entering the slice
-      if (self._scrollDirection !== 1) return;   // unidirectional (down only)
+    var now = this._now();
+    var dir = this._scrollDirection || 1; // 1=down, -1=up
+    if (dir !== 1) return; // unidirectional (down only)
+
+    var anchorY = (window.innerHeight || document.documentElement.clientHeight) * (ViewportAnchorFraction || 0.35);
+
+    for (var i = 0; i < entries.length; i++) {
+      var entry = entries[i];
+      if (!entry.isIntersecting) continue; // only when entering the slice
 
       var target = entry.target;
       var drawer = target.closest("[data-drawer]");
-      if (!drawer) return;
+      if (!drawer) continue;
 
       // respect lockout
       var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
-      if (lockedUntil > now) return;
+      if (lockedUntil > now) continue;
 
-      if (target.matches("[data-drawer-summary]")) {
-        if (!drawer.classList.contains("Drawer--Open")) {
-          self.OpenDrawer(drawer);
-          if (OnlyOneOpenAtATime) self.CloseSiblings(drawer);
+      var idx = this._indexOf(drawer);
+      if (idx < 0) continue;
+
+      // Only allow transitions to the current active or its immediate next
+      var canAdvanceDown = (idx === this._activeIndex || idx === this._activeIndex + 1);
+
+      var rect = target.getBoundingClientRect();
+
+      if (target.hasAttribute("data-drawer-summary")) {
+        // title row; compare its bottom to the anchor with hysteresis
+        if (!canAdvanceDown) continue;
+        if ((rect.bottom - anchorY) >= OpenThresholdPx) {
+          this._openOnly(idx);
+          return; // single state change per batch
         }
-      } else if (target.matches("[data-close-marker]")) {
-        if (drawer.classList.contains("Drawer--Open")) {
-          self.CloseAndLock(drawer);
-          var next = self._NextDrawer(drawer);
-          if (next) {
-            var lockedNext = parseFloat(next.dataset.lockedUntil || "0");
-            if (lockedNext <= now && !next.classList.contains("Drawer--Open")) {
-              self.OpenDrawer(next);
-              if (OnlyOneOpenAtATime) self.CloseSiblings(next);
-            }
-          }
+      } else if (target.hasAttribute("data-close-marker")) {
+        // content-bottom marker; compare its top to the anchor with hysteresis
+        if (idx !== this._activeIndex) continue;
+        if ((anchorY - rect.top) >= CloseThresholdPx) {
+          var next = this._nextIndex(idx);
+          this.CloseAndLock(drawer);
+          this._openOnly(next);
+          return;
         }
       }
-    });
+    }
   };
 
   DrawerController.prototype._NextDrawer = function (drawer) {
@@ -328,9 +390,12 @@
   DrawerController.prototype.OpenById = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
+    var idx = this._indexOf(drawer);
     if (!drawer.classList.contains("Drawer--Open")) {
-      this.OpenDrawer(drawer);
-      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
+      if (OnlyOneOpenAtATime) this._openOnly(idx);
+      else this.OpenDrawer(drawer);
+    } else if (OnlyOneOpenAtATime) {
+      this._openOnly(idx);
     }
   };
 
@@ -361,17 +426,17 @@
     }
     return null;
   };
-  
+
   DrawerController.prototype._ApplyNoTailOnFill = function () {
-  for (var i = 0; i < this._drawers.length; i++) {
-    var d = this._drawers[i];
-    var content = d.querySelector("[data-drawer-content]");
-    if (!content) continue;
-    if (content.classList.contains("DrawerContent--Fill")) {
-      d.classList.add("Drawer--NoTail"); // kill the open-panel tail for fill content
+    for (var i = 0; i < this._drawers.length; i++) {
+      var d = this._drawers[i];
+      var content = d.querySelector("[data-drawer-content]");
+      if (!content) continue;
+      if (content.classList.contains("DrawerContent--Fill")) {
+        d.classList.add("Drawer--NoTail"); // kill the open-panel tail for fill content
+      }
     }
-  }
-};
+  };
 
   // ---------- Boot ----------
 
