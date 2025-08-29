@@ -218,6 +218,12 @@ body {
   padding: 0;
 }
 
+/* When open, disable the intrinsic sizing hint so JS measures real height */
+.Drawer--Open > .DrawerContent{
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+
 /* ---------- Drawer open panel background + rounded base ---------- */
 .Drawer--Open {
   --_h:  calc(var(--DrawerTitleBarBaseHueDegrees)   + var(--DrawerTitleBarHueStepPerDrawerDegrees) * var(--_step));
