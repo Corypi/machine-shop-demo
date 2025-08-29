@@ -294,6 +294,22 @@ body {
   padding-bottom: 0 !important;
 }
 
+/* Clip the overlay to the video box and make it the positioning context */
+.DrawerContent--Fill{ position: relative; overflow: hidden; }
+
+/* Kill the open-panel tail on any fixed-video drawers (and for NoTail flag) */
+.Drawer--Open.Drawer--FixedHero,
+.Drawer--Open.Drawer--FixedShort,
+.Drawer--Open.Drawer--NoTail{
+  padding-bottom: 0 !important; /* override the base .Drawer--Open tail */
+}
+
+/* Keep the overlay comfortably in from the edge (a bit less than 30px) */
+.SkipButton.SkipButton--Overlay{
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+}
+
 .VideoFixed {
   display: block;
   width: 100%;
