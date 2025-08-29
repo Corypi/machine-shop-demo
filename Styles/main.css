@@ -282,11 +282,11 @@ body {
 
 /* Apply clamped video height only while the drawer is open */
 .Drawer--Open.Drawer--FixedHero  > .DrawerContent{
-  height: clamp(70svh, calc(100vw * 9 / 16), 100svh);
+  height: clamp(70dvh, calc(100vw * 9 / 16), 100dvh);
   min-height: 0;
 }
 .Drawer--Open.Drawer--FixedShort > .DrawerContent{
-  height: clamp(48svh, calc(100vw * 9 / 16), 70svh);
+  height: clamp(48dvh, calc(100vw * 9 / 16), 70dvh);
 }
 
 /* No extra panel tail when the content is “fill” (class added via JS) */
