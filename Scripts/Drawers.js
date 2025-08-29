@@ -249,72 +249,77 @@
   };
 
   // Close when 35% anchor reaches the bottom of the OPEN drawer's content (±tolerance),
-  // then open the next drawer. Otherwise, ensure the drawer whose bottom is below the
-  // anchor is open.
-  DrawerController.prototype.EvaluateByBottomAnchor = function () {
-    var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-    var anchorY = viewportHeight * ViewportAnchorFraction;
-    var now = this._now();
+// then open the next drawer. Otherwise, ensure the first drawer whose (predicted)
+// bottom is still below the anchor is open.
+DrawerController.prototype.EvaluateByBottomAnchor = function () {
+  var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  var anchorY = viewportHeight * ViewportAnchorFraction;
+  var now = this._now();
 
-    // Build list of drawer geometry
-    var list = [];
-    for (var i = 0; i < this._drawers.length; i++) {
-      var d = this._drawers[i];
-      var content = d.querySelector("[data-drawer-content]");
-      var summary = d.querySelector("[data-drawer-summary]") || d;
-      if (!content) continue;
+  // Build list of drawer geometry + a "bottomForOpenLogic" that works even when closed
+  var list = [];
+  for (var i = 0; i < this._drawers.length; i++) {
+    var d = this._drawers[i];
+    var content = d.querySelector("[data-drawer-content]");
+    var summary = d.querySelector("[data-drawer-summary]") || d;
+    if (!content) continue;
 
-      list.push({
-        node: d,
-        isOpen: d.classList.contains("Drawer--Open"),
-        contentRect: content.getBoundingClientRect(),
-        summaryRect: summary.getBoundingClientRect(),
-        lockedUntil: parseFloat(d.dataset.lockedUntil || "0")
-      });
-    }
-    if (!list.length) return;
+    var isOpen = d.classList.contains("Drawer--Open");
+    var contentRect = content.getBoundingClientRect();
+    var summaryRect = summary.getBoundingClientRect();
 
-    // 1) If an open drawer's bottom has reached the anchor, close it and open the next
-    for (var j = 0; j < list.length; j++) {
-      var item = list[j];
-      if (!item.isOpen) continue;
+    // If closed, the DOM bottom == summary bottom. Predict where the real bottom would be:
+    var predictedBottomWhenClosed = summaryRect.bottom + content.scrollHeight;
+    var bottomForOpenLogic = isOpen ? contentRect.bottom : predictedBottomWhenClosed;
 
-      var bottom = item.contentRect.bottom;
-      if (anchorY >= (bottom - CloseOvershootPx)) {
-        // Close and lock
-        this.CloseAndLock(item.node);
+    list.push({
+      node: d,
+      isOpen: isOpen,
+      contentRect: contentRect,
+      summaryRect: summaryRect,
+      bottomForOpenLogic: bottomForOpenLogic,
+      lockedUntil: parseFloat(d.dataset.lockedUntil || "0")
+    });
+  }
+  if (!list.length) return;
 
-        // Open next (if any and not locked)
-        var nextIdx = j + 1;
-        if (nextIdx < list.length) {
-          var next = list[nextIdx];
-          if (next.lockedUntil <= now) {
-            if (!next.node.classList.contains("Drawer--Open")) {
-              this.OpenDrawer(next.node);
-            }
-            if (OnlyOneOpenAtATime) this.CloseSiblings(next.node);
-          }
+  // 1) If an open drawer's bottom has reached/passed the anchor, close it and open the next
+  for (var j = 0; j < list.length; j++) {
+    var item = list[j];
+    if (!item.isOpen) continue;
+
+    if (anchorY >= (item.bottomForOpenLogic - CloseOvershootPx)) {
+      // Close and lock current
+      this.CloseAndLock(item.node);
+
+      // Open next (if any and not locked)
+      var nextIdx = j + 1;
+      if (nextIdx < list.length) {
+        var next = list[nextIdx];
+        if (next.lockedUntil <= now && !next.node.classList.contains("Drawer--Open")) {
+          this.OpenDrawer(next.node);
+          if (OnlyOneOpenAtATime) this.CloseSiblings(next.node);
         }
-        return; // handled this frame
       }
+      return; // handled this frame
     }
+  }
 
-    // 2) Otherwise, ensure the first drawer whose bottom is still below the anchor is open
-    for (var k = 0; k < list.length; k++) {
-      var it = list[k];
-      if (it.lockedUntil > now) continue;
+  // 2) Otherwise, ensure the first drawer whose (predicted) bottom is still below the anchor is open
+  for (var k = 0; k < list.length; k++) {
+    var it = list[k];
+    if (it.lockedUntil > now) continue;
 
-      if (anchorY < (it.contentRect.bottom - CloseOvershootPx)) {
-        if (!it.node.classList.contains("Drawer--Open")) {
-          this.OpenDrawer(it.node);
-          if (OnlyOneOpenAtATime) this.CloseSiblings(it.node);
-        }
-        return;
+    if (anchorY < (it.bottomForOpenLogic - CloseOvershootPx)) {
+      if (!it.node.classList.contains("Drawer--Open")) {
+        this.OpenDrawer(it.node);
+        if (OnlyOneOpenAtATime) this.CloseSiblings(it.node);
       }
+      return;
     }
-    // If we get here, the anchor is below all content bottoms; nothing to open.
-  };
-
+  }
+  // If we get here, anchor is below all bottoms; nothing to open.
+};
   // ---------- Public helpers ----------
 
   DrawerController.prototype.OpenById = function (id) {
