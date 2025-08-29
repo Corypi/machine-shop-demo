@@ -9,11 +9,7 @@
   var AutoOpenOnScroll = true;
   var ViewportAnchorFraction = 0.35; // 35% from top
 
-  // Do NOT pause while scrolling (IO needs to fire live)
-  var PauseAutoOpenWhileScrolling = false;
-  var ScrollIdleMs = 120; // kept for completeness
-
-  // Anti-flap
+  // Anti-flap after programmatic close
   var SuppressMsAfterProgrammaticClose = 250;
 
   // IO at a virtual "line" = 35% from top
@@ -58,7 +54,7 @@
       this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
     }
 
-    // *** New: start EVERYTHING closed (ignore whatever HTML had) ***
+    // Start EVERYTHING closed (ignore whatever HTML had)
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       d.classList.remove("Drawer--Open", "Drawer--NoTail");
@@ -131,25 +127,16 @@
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
-    // Measure after layout
+    // Measure final height after the open class applies layout
     var self = this;
     requestAnimationFrame(function () {
-      var endHeight = content.getBoundingClientRect().height;
+      // For fixed-hero/short drawers, the clamped height is reflected in layout => use client height
+      var endHeight = content.getBoundingClientRect().height || content.scrollHeight;
       self.AnimateHeight(content, startHeight, endHeight);
     });
 
-    // If there’s a video, re-sync height when metadata arrives
-    var vid = content.querySelector("video");
-    if (vid) {
-      var onMeta = function () {
-        if (drawer.classList.contains("Drawer--Open")) {
-          var h = content.getBoundingClientRect().height;
-          content.style.height = h + "px";
-        }
-        vid.removeEventListener("loadedmetadata", onMeta);
-      };
-      vid.addEventListener("loadedmetadata", onMeta, { once: true });
-    }
+    // Keep open panels in sync if media updates later
+    this._wireMediaAutoGrow(content);
   };
 
   DrawerController.prototype.CloseDrawer = function (drawer) {
@@ -188,54 +175,61 @@
 
   // ---------- Animation + ARIA ----------
 
+  // Drop-in: animates to px, then sets auto for open state; pins the 35% line
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
-  var self = this;
+    var self = this;
 
-  // ---- viewport pin: capture the docY of the 35% line before we mutate ----
-  var vh = window.innerHeight || document.documentElement.clientHeight;
-  var anchorDocYBefore = (window.pageYOffset || document.documentElement.scrollTop || 0)
-                       + vh * ViewportAnchorFraction;
+    // Capture the docY of the 35% line before we mutate
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var anchorDocYBefore = (window.pageYOffset || document.documentElement.scrollTop || 0)
+                         + vh * ViewportAnchorFraction;
 
-  // If another animation is in-flight, snap to its end state first
-  if (this._isAnimating) {
-    element.style.transition = "";
-    element.style.height = endHeight > 0 ? (endHeight + "px") : "";
-  }
+    // If another animation is in-flight, snap to its end state first
+    if (this._isAnimating) {
+      element.style.transition = "";
+      element.style.height = endHeight > 0 ? (endHeight + "px") : "";
+    }
 
-  this._isAnimating = true;
+    this._isAnimating = true;
 
-  element.style.height = Math.max(0, startHeight) + "px";
-  void element.offsetHeight; // force reflow
+    // Phase 1: set start
+    element.style.height = Math.max(0, startHeight) + "px";
+    void element.offsetHeight; // reflow
 
-  element.style.transition = "height " + AnimationDurationMs + "ms ease";
-  element.style.height = Math.max(0, endHeight) + "px";
+    // Phase 2: animate to target
+    element.style.transition = "height " + AnimationDurationMs + "ms ease";
+    element.style.height = Math.max(0, endHeight) + "px";
 
-  function onEnd(e) {
-    if (e.propertyName !== "height") return;
+    function onEnd(e) {
+      if (e.propertyName !== "height") return;
 
-    // Clean up transition + final explicit height
-    element.style.transition = "";
-    element.style.height = endHeight > 0 ? (endHeight + "px") : "";
+      element.removeEventListener("transitionend", onEnd);
+      element.style.transition = "";
 
-    element.removeEventListener("transitionend", onEnd);
-    self._isAnimating = false;
-
-    // ---- viewport pin: restore the docY of the 35% line after layout settled ----
-    // Use rAF to ensure layout has fully committed.
-    window.requestAnimationFrame(function () {
-      var anchorDocYAfter = (window.pageYOffset || document.documentElement.scrollTop || 0)
-                          + (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction;
-
-      var delta = anchorDocYAfter - anchorDocYBefore;
-      if (Math.abs(delta) > 0.5) {
-        // Scroll back by the delta to keep the 35% line visually fixed
-        window.scrollBy(0, -delta);
+      // If opening, let it breathe for late media/layout by switching to auto
+      if (endHeight > 0) {
+        element.style.height = "auto";
+      } else {
+        element.style.height = "";
       }
-    });
-  }
 
-  element.addEventListener("transitionend", onEnd);
-};
+      self._isAnimating = false;
+
+      // Restore the 35% line after layout settles (double-rAF for 'auto' to commit)
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          var anchorDocYAfter =
+            (window.pageYOffset || document.documentElement.scrollTop || 0) +
+            (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction;
+
+          var delta = anchorDocYAfter - anchorDocYBefore;
+          if (Math.abs(delta) > 0.5) window.scrollBy(0, -delta);
+        });
+      });
+    }
+
+    element.addEventListener("transitionend", onEnd);
+  };
 
   DrawerController.prototype.SyncAria = function () {
     for (var i = 0; i < this._drawers.length; i++) {
@@ -264,12 +258,29 @@
         } else {
           drawer.classList.remove("Drawer--NoTail");
         }
-        // lock to actual rendered height, not scrollHeight
-        content.style.height = content.getBoundingClientRect().height + "px";
+        // leave height as 'auto' for open panels (AnimateHeight sets it)
+        content.style.height = "auto";
       } else {
         drawer.classList.remove("Drawer--NoTail");
         content.style.height = "";
       }
+    }
+  };
+
+  // NEW: keep an open drawer growing if its media finishes sizing later
+  DrawerController.prototype._wireMediaAutoGrow = function (content) {
+    var medias = content.querySelectorAll("video, img, iframe");
+    function maybeSync() {
+      var d = content.closest("[data-drawer]");
+      if (!d || !d.classList.contains("Drawer--Open")) return;
+      // We keep height:auto while open, so nothing to enforce here.
+      // If you ever want to lock pixels after growth: content.style.height = content.scrollHeight + "px";
+    }
+    for (var i = 0; i < medias.length; i++) {
+      var m = medias[i];
+      m.addEventListener("loadedmetadata", maybeSync, { passive: true });
+      m.addEventListener("loadeddata",     maybeSync, { passive: true });
+      m.addEventListener("load",           maybeSync, { passive: true });
     }
   };
 
@@ -413,10 +424,13 @@
     var instance = new DrawerController(document);
     window.DrawersController = instance;
 
-    // *** New: after layout, open INTRO and start its video ***
+    // After layout, open INTRO and start its video (without IO fighting it)
     var openIntro = function () {
       var intro = document.getElementById("Intro");
-      if (!intro) return;
+      if (!intro) {
+        instance._booting = false;
+        return;
+      }
 
       // suppress IO briefly so it doesn't fight this programmatic open
       instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
