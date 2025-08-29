@@ -15,7 +15,10 @@
 
   // Anti-flap controls
   var SuppressMsAfterProgrammaticClose = 700; // just-closed shouldn't re-open
-  var CenterDeadbandPx = 24;                  // small buffer around the center
+  var CenterDeadbandPx = 24;                  // kept (unused in bottom logic; safe to remove later)
+
+  // Bottom-anchor tuning
+  var CloseOvershootPx = 12;                  // allow a small ± window at the content bottom
 
   // ============================================
 
@@ -193,7 +196,7 @@
     }
   };
 
-  // ---------- Auto open/close on scroll (center-based) ----------
+  // ---------- Auto open/close on scroll (BOTTOM-of-content anchor) ----------
 
   DrawerController.prototype.EnableScrollAutoToggle = function () {
     var self = this;
@@ -241,68 +244,75 @@
 
     window.requestAnimationFrame(function () {
       self._scrollRafPending = false;
-      self.EvaluateByContentCenter();
+      self.EvaluateByBottomAnchor();
     });
   };
 
-  // Core: open if anchor is ABOVE the drawer's content center; close if BELOW
-  DrawerController.prototype.EvaluateByContentCenter = function () {
+  // Close when 35% anchor reaches the bottom of the OPEN drawer's content (±tolerance),
+  // then open the next drawer. Otherwise, ensure the drawer whose bottom is below the
+  // anchor is open.
+  DrawerController.prototype.EvaluateByBottomAnchor = function () {
     var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
     var anchorY = viewportHeight * ViewportAnchorFraction;
     var now = this._now();
 
-    // Find the closest candidate to open (center below anchor)
-    var candidate = null;
-    var bestDelta = Infinity;
-
+    // Build list of drawer geometry
+    var list = [];
     for (var i = 0; i < this._drawers.length; i++) {
-      var drawer = this._drawers[i];
+      var d = this._drawers[i];
+      var content = d.querySelector("[data-drawer-content]");
+      var summary = d.querySelector("[data-drawer-summary]") || d;
+      if (!content) continue;
 
-      // Respect suppression window
-      var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
-      if (lockedUntil > now) continue;
+      list.push({
+        node: d,
+        isOpen: d.classList.contains("Drawer--Open"),
+        contentRect: content.getBoundingClientRect(),
+        summaryRect: summary.getBoundingClientRect(),
+        lockedUntil: parseFloat(d.dataset.lockedUntil || "0")
+      });
+    }
+    if (!list.length) return;
 
-      var summary = drawer.querySelector("[data-drawer-summary]");
-      var content = drawer.querySelector("[data-drawer-content]");
-      if (!summary || !content) continue;
+    // 1) If an open drawer's bottom has reached the anchor, close it and open the next
+    for (var j = 0; j < list.length; j++) {
+      var item = list[j];
+      if (!item.isOpen) continue;
 
-      var summaryRect = summary.getBoundingClientRect();
-      // center = bottom of title + half of the natural content height (even if collapsed)
-      var centerY = summaryRect.bottom + (content.scrollHeight / 2);
+      var bottom = item.contentRect.bottom;
+      if (anchorY >= (bottom - CloseOvershootPx)) {
+        // Close and lock
+        this.CloseAndLock(item.node);
 
-      var delta = centerY - anchorY; // positive: center below anchor; negative: above
-      if (delta >= CenterDeadbandPx && delta < bestDelta) {
-        bestDelta = delta;
-        candidate = drawer;
+        // Open next (if any and not locked)
+        var nextIdx = j + 1;
+        if (nextIdx < list.length) {
+          var next = list[nextIdx];
+          if (next.lockedUntil <= now) {
+            if (!next.node.classList.contains("Drawer--Open")) {
+              this.OpenDrawer(next.node);
+            }
+            if (OnlyOneOpenAtATime) this.CloseSiblings(next.node);
+          }
+        }
+        return; // handled this frame
       }
     }
 
-    // Open the closest valid candidate (if any)
-    if (candidate && !candidate.classList.contains("Drawer--Open")) {
-      this.OpenDrawer(candidate);
-    }
+    // 2) Otherwise, ensure the first drawer whose bottom is still below the anchor is open
+    for (var k = 0; k < list.length; k++) {
+      var it = list[k];
+      if (it.lockedUntil > now) continue;
 
-    // Close drawers whose center is now above the anchor (beyond deadband)
-    for (var j = 0; j < this._drawers.length; j++) {
-      var d = this._drawers[j];
-      if (!d.classList.contains("Drawer--Open")) continue;
-
-      var s = d.querySelector("[data-drawer-summary]");
-      var c = d.querySelector("[data-drawer-content]");
-      if (!s || !c) continue;
-
-      var sRect = s.getBoundingClientRect();
-      var center = sRect.bottom + (c.scrollHeight / 2);
-      var diff = center - anchorY;
-
-      if (diff <= -CenterDeadbandPx) {
-        // center is above anchor → close
-        this.CloseDrawer(d);
-      } else if (OnlyOneOpenAtATime && candidate && d !== candidate) {
-        // enforce single-open if requested
-        this.CloseDrawer(d);
+      if (anchorY < (it.contentRect.bottom - CloseOvershootPx)) {
+        if (!it.node.classList.contains("Drawer--Open")) {
+          this.OpenDrawer(it.node);
+          if (OnlyOneOpenAtATime) this.CloseSiblings(it.node);
+        }
+        return;
       }
     }
+    // If we get here, the anchor is below all content bottoms; nothing to open.
   };
 
   // ---------- Public helpers ----------
