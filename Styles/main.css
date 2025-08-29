@@ -111,6 +111,29 @@ body {
   margin: 2rem auto;
   padding: 0 1rem;
 }
+
+/* Headroom/tailroom so the 35% anchor can hit first/last markers */
+:root{
+  /* reuse your existing var for 35vh; derive the bottom slice (65vh) */
+  --ScrollAnchorTopBufferVh: var(--ViewportAnchorTriggerLinePositionVh);
+  --ScrollAnchorBottomBufferVh: calc(100vh - var(--ViewportAnchorTriggerLinePositionVh));
+}
+
+/* Add space *inside* the main content flow, before first drawer & after last */
+.Container::before,
+.Container::after{
+  content: "";
+  display: block;
+}
+
+.Container::before{
+  height: var(--ScrollAnchorTopBufferVh);    /* top headroom */
+}
+
+.Container::after{
+  height: var(--ScrollAnchorBottomBufferVh); /* bottom tailroom */
+}
+
 .SectionTitle {
   margin: 0 0 0.75rem 0;
   font-size: 1.25rem;
