@@ -14,7 +14,7 @@
   var ScrollIdleMs = 120; // kept for completeness
 
   // Anti-flap
-  var SuppressMsAfterProgrammaticClose = 700;
+  var SuppressMsAfterProgrammaticClose = 250;
 
   // IO at a virtual "line" = 35% from top
   var RootMarginForAnchor =
