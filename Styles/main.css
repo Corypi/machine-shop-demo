@@ -258,11 +258,6 @@ body {
 /*==========================================================
   Fixed-height Video (applies only while open)
 ==========================================================*/
-/* Disabled legacy fixed-height on the drawer itself */
-/*
-.Drawer--FixedHero  { height: 100svh; height: 100vh; }
-.Drawer--FixedShort { height: 70svh;  height: 70vh;  }
-*/
 
 /* Apply clamped video height only while the drawer is open */
 .Drawer--Open.Drawer--FixedHero  > .DrawerContent{
@@ -273,11 +268,14 @@ body {
   height: clamp(48dvh, calc(100vw * 9 / 16), 70dvh);
 }
 
-/* If an open drawer contains a fill content block, remove the panel tail */
-.Drawer--Open.Drawer--NoTail{ padding-bottom: 0; }
+/* === NEW: extend video drawers by one closed-header height === */
+.Drawer--Open.Drawer--FixedHero,
+.Drawer--Open.Drawer--FixedShort,
+.Drawer--Open:has(> .DrawerContent.DrawerContent--Fill){
+  padding-bottom: var(--DrawerCollapsedHeaderBarHeightRems);
+}
 
 /* Allow the video to truly fill the content height (avoid grid sizing quirks) */
-/* Let the video truly fill the clamped content height */
 .DrawerContent--Fill{
   display: block;        /* override grid for this variant */
   position: relative;    /* anchor absolute children (video/overlay) */
@@ -286,7 +284,6 @@ body {
   min-height: 0;
 }
 
-/* Video fills the content box height */
 /* Make the video fill the content box exactly */
 .VideoFixed{
   position: absolute;
@@ -298,10 +295,6 @@ body {
   object-position: center;
   background: #000;
   z-index: 0;            /* keep overlay button above */
-}
-/* Remove the open-panel tail whenever the content is a fill block */
-.Drawer--Open:has(> .DrawerContent.DrawerContent--Fill){
-  padding-bottom: 0 !important;
 }
 
 /*==========================================================
