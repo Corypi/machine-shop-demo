@@ -113,37 +113,45 @@
 
   // ---------- Programmatic open/close ----------
 
-  DrawerController.prototype.OpenDrawer = function (drawer) {
-    var content = drawer.querySelector("[data-drawer-content]");
-    if (!content) return;
+DrawerController.prototype.OpenDrawer = function (drawer) {
+  var content = drawer.querySelector("[data-drawer-content]");
+  if (!content) return;
 
-    var startHeight = content.getBoundingClientRect().height;
+  // If this drawer’s content fills edge-to-edge, drop the panel tail via CSS
+  if (content.classList.contains("DrawerContent--Fill")) {
+    drawer.classList.add("Drawer--NoTail");
+  } else {
+    drawer.classList.remove("Drawer--NoTail");
+  }
 
-    drawer.classList.add("Drawer--Open");
-    this.SetAriaExpanded(drawer, true);
+  var startHeight = content.getBoundingClientRect().height;
 
-    var endHeight = content.scrollHeight;
-    this.AnimateHeight(content, startHeight, endHeight);
-  };
+  drawer.classList.add("Drawer--Open");
+  this.SetAriaExpanded(drawer, true);
 
-  DrawerController.prototype.CloseDrawer = function (drawer) {
-    var content = drawer.querySelector("[data-drawer-content]");
-    if (!content) return;
+  var endHeight = content.scrollHeight;
+  this.AnimateHeight(content, startHeight, endHeight);
+};
 
-    var startHeight = content.getBoundingClientRect().height;
+DrawerController.prototype.CloseDrawer = function (drawer) {
+  var content = drawer.querySelector("[data-drawer-content]");
+  if (!content) return;
 
-    drawer.classList.remove("Drawer--Open");
-    this.SetAriaExpanded(drawer, false);
+  var startHeight = content.getBoundingClientRect().height;
 
-    // Pause/rewind any videos in this drawer
-    var vids = drawer.querySelectorAll("video");
-    for (var i = 0; i < vids.length; i++) {
-      try { vids[i].pause(); vids[i].currentTime = 0; } catch (e) {}
-    }
+  drawer.classList.remove("Drawer--Open");
+  drawer.classList.remove("Drawer--NoTail"); // reset
+  this.SetAriaExpanded(drawer, false);
 
-    var endHeight = 0;
-    this.AnimateHeight(content, startHeight, endHeight);
-  };
+  // Pause/rewind any videos in this drawer
+  var vids = drawer.querySelectorAll("video");
+  for (var i = 0; i < vids.length; i++) {
+    try { vids[i].pause(); vids[i].currentTime = 0; } catch (e) {}
+  }
+
+  var endHeight = 0;
+  this.AnimateHeight(content, startHeight, endHeight);
+};
 
   DrawerController.prototype.CloseAndLock = function (drawer) {
     this.CloseDrawer(drawer);
@@ -287,26 +295,26 @@
       var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
       if (lockedUntil > now) return;
 
-      if (target.hasAttribute("data-drawer-summary")) {
-        // OPEN MARKER crossed the line → open this drawer
-        if (!drawer.classList.contains("Drawer--Open")) {
-          self.OpenDrawer(drawer);
-          if (OnlyOneOpenAtATime) self.CloseSiblings(drawer);
-        }
-      } else if (target.hasAttribute("data-close-marker")) {
-        // CLOSE MARKER (content bottom) crossed the line → close this and open next
-        if (drawer.classList.contains("Drawer--Open")) {
-          self.CloseAndLock(drawer);
-          var next = self._NextDrawer(drawer);
-          if (next) {
-            var lockedNext = parseFloat(next.dataset.lockedUntil || "0");
-            if (lockedNext <= now && !next.classList.contains("Drawer--Open")) {
-              self.OpenDrawer(next);
-              if (OnlyOneOpenAtATime) self.CloseSiblings(next);
-            }
-          }
-        }
+     if (target.matches("[data-drawer-summary]")) {
+  // OPEN MARKER crossed the line → open this drawer
+  if (!drawer.classList.contains("Drawer--Open")) {
+    self.OpenDrawer(drawer);
+    if (OnlyOneOpenAtATime) self.CloseSiblings(drawer);
+  }
+} else if (target.matches("[data-close-marker]")) {
+  // CLOSE MARKER (content bottom) crossed the line → close this and open next
+  if (drawer.classList.contains("Drawer--Open")) {
+    self.CloseAndLock(drawer);
+    var next = self._NextDrawer(drawer);
+    if (next) {
+      var lockedNext = parseFloat(next.dataset.lockedUntil || "0");
+      if (lockedNext <= now && !next.classList.contains("Drawer--Open")) {
+        self.OpenDrawer(next);
+        if (OnlyOneOpenAtATime) self.CloseSiblings(next);
       }
+    }
+  }
+}
     });
   };
 
