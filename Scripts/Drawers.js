@@ -140,24 +140,42 @@
   // ---------- Programmatic open/close ----------
 
   DrawerController.prototype.OpenDrawer = function (drawer) {
-    var content = drawer.querySelector("[data-drawer-content]");
-    if (!content) return;
+  var content = drawer.querySelector("[data-drawer-content]");
+  if (!content) return;
 
-    // Tail state for fill content
-    if (content.classList.contains("DrawerContent--Fill")) {
-      drawer.classList.add("Drawer--NoTail");
-    } else {
-      drawer.classList.remove("Drawer--NoTail");
-    }
+  // Tail state for fill content
+  if (content.classList.contains("DrawerContent--Fill")) {
+    drawer.classList.add("Drawer--NoTail");
+  } else {
+    drawer.classList.remove("Drawer--NoTail");
+  }
 
-    var startHeight = content.getBoundingClientRect().height;
+  var startHeight = content.getBoundingClientRect().height;
 
-    drawer.classList.add("Drawer--Open");
-    this.SetAriaExpanded(drawer, true);
+  drawer.classList.add("Drawer--Open");
+  this.SetAriaExpanded(drawer, true);
 
-    var endHeight = content.scrollHeight;
-    this.AnimateHeight(content, startHeight, endHeight);
-  };
+  // Let layout settle, then measure the *real* rendered height
+  var self = this;
+  requestAnimationFrame(function () {
+    var endHeight = content.getBoundingClientRect().height;
+    self.AnimateHeight(content, startHeight, endHeight);
+  });
+
+  // If there’s a video, re-sync once metadata gives us final dimensions
+  var vid = content.querySelector("video");
+  if (vid) {
+    var onMeta = function () {
+      // re-measure only if still open
+      if (drawer.classList.contains("Drawer--Open")) {
+        var h = content.getBoundingClientRect().height;
+        content.style.height = h + "px";
+      }
+      vid.removeEventListener("loadedmetadata", onMeta);
+    };
+    vid.addEventListener("loadedmetadata", onMeta, { once: true });
+  }
+};
 
   DrawerController.prototype.CloseDrawer = function (drawer) {
     var content = drawer.querySelector("[data-drawer-content]");
@@ -250,7 +268,7 @@
         } else {
           drawer.classList.remove("Drawer--NoTail");
         }
-        content.style.height = content.scrollHeight + "px";
+        content.style.height = content.getBoundingClientRect().height + "px";
       } else {
         drawer.classList.remove("Drawer--NoTail");
         content.style.height = "";
