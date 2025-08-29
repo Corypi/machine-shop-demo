@@ -116,5 +116,46 @@
   ======================================================= -->
   <script src="../Scripts/Utilities.js"></script>
   <script src="../Scripts/Drawers.js"></script>
+  
+  <script>
+(function(){
+  function probe() {
+    var intro = document.getElementById("Intro");
+    if (!intro) return;
+
+    var content = intro.querySelector("[data-drawer-content]");
+    var video   = intro.querySelector("video");
+    var button  = intro.querySelector(".SkipButton--Overlay");
+
+    var cr = content ? content.getBoundingClientRect() : null;
+    var vr = video   ? video.getBoundingClientRect()   : null;
+    var br = button  ? button.getBoundingClientRect()  : null;
+
+    var txt = [
+      "content bottom: " + (cr ? Math.round(cr.bottom) : "—"),
+      "video   bottom: " + (vr ? Math.round(vr.bottom) : "—"),
+      "button  bottom: " + (br ? Math.round(br.bottom) : "—"),
+      "content height: " + (cr ? Math.round(cr.height) : "—"),
+      "video   height: " + (vr ? Math.round(vr.height) : "—")
+    ].join("\n");
+
+    var box = document.getElementById("DebugProbe");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "DebugProbe";
+      document.body.appendChild(box);
+    }
+    box.textContent = txt;
+  }
+
+  ["load","resize","orientationchange","scroll"].forEach(function(ev){
+    window.addEventListener(ev, probe, {passive:true});
+  });
+  document.addEventListener("loadedmetadata", probe, true);
+  document.addEventListener("transitionend", probe, true);
+  setInterval(probe, 400); // keep it fresh while testing
+})();
+</script>
+
 </body>
 </html>
