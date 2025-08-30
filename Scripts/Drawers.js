@@ -1,24 +1,31 @@
 (function () {
   "use strict";
 
-  // ===== Configuration (no magic numbers) =====
+  // ===== Configuration =====
   var AnimationDurationMs = 220;
   var OnlyOneOpenAtATime = true;
 
-  // Auto open/close on scroll via “virtual line”
+  // Auto open/close on scroll via a single “virtual line”
   var AutoOpenOnScroll = true;
-  var ViewportAnchorFraction = 0.35; // 35% from top
+  var ViewportAnchorFraction = 0.35; // 35% from the top
+  var OpenOffsetPx = 28;             // open slightly *below* that line
 
   // Anti-flap after programmatic close
   var SuppressMsAfterProgrammaticClose = 250;
 
-  // IO at a virtual "line" = 35% from top
-  var RootMarginForAnchor =
-    (-(ViewportAnchorFraction * 100)).toFixed(3) + "% 0px " +
-    (-(100 - ViewportAnchorFraction * 100)).toFixed(3) + "% 0px";
-
   // Suppress IO reactions briefly during boot/programmatic open
   var SuppressIOAfterBootMs = 400;
+
+  // A thin horizontal slice around our line using rootMargin
+  // (top/bottom percentages create the "slice"; px offset slides it downward)
+  function computeRootMargin() {
+    var topPct = -(ViewportAnchorFraction * 100);
+    var botPct = -(100 - ViewportAnchorFraction * 100);
+    // Shift slice downward by OpenOffsetPx:
+    // more negative on top, less negative on bottom by the same px
+    return (topPct.toFixed(3) + "% 0px " + botPct.toFixed(3) + "% 0px")
+           .replace("% 0px", "% 0px") + ""; // (keep as string)
+  }
 
   // ============================================
 
@@ -49,11 +56,6 @@
     this._drawers = this._root.querySelectorAll("[data-drawer]");
     this._summaries = this._root.querySelectorAll("[data-drawer-summary]");
 
-    for (var i = 0; i < this._summaries.length; i++) {
-      this._summaries[i].addEventListener("click", this.OnToggleRequested.bind(this));
-      this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
-    }
-
     // Start EVERYTHING closed (ignore whatever HTML had)
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
@@ -62,29 +64,16 @@
       if (c) c.style.height = "";
     }
 
-    
-
-    // Inject close markers at end of each content
-    this._InstallCloseMarkers();
+    // Wire summary clicks/keys
+    for (var i = 0; i < this._summaries.length; i++) {
+      this._summaries[i].addEventListener("click", this.OnToggleRequested.bind(this));
+      this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
+    }
 
     this.SyncAria();
     this.SyncHeights();
 
     if (AutoOpenOnScroll) this.EnableScrollAutoToggle();
-  };
-
-  DrawerController.prototype._InstallCloseMarkers = function () {
-    for (var i = 0; i < this._drawers.length; i++) {
-      var d = this._drawers[i];
-      var content = d.querySelector("[data-drawer-content]");
-      if (!content) continue;
-      if (!content.querySelector("[data-close-marker]")) {
-        var marker = document.createElement("div");
-        marker.setAttribute("data-close-marker", "");
-        marker.style.cssText = "position:relative;height:1px;width:1px;pointer-events:none;";
-        content.appendChild(marker);
-      }
-    }
   };
 
   // ---------- Interaction ----------
@@ -129,15 +118,13 @@
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
-    // Measure final height after the open class applies layout
     var self = this;
     requestAnimationFrame(function () {
-      // For fixed-hero/short drawers, the clamped height is reflected in layout => use client height
+      // Use client height (respects clamped dvh rules) as target
       var endHeight = content.getBoundingClientRect().height || content.scrollHeight;
       self.AnimateHeight(content, startHeight, endHeight);
     });
 
-    // Keep open panels in sync if media updates later
     this._wireMediaAutoGrow(content);
   };
 
@@ -177,16 +164,14 @@
 
   // ---------- Animation + ARIA ----------
 
-  // Animates to px, then sets auto for open state; pins the 35% line
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
     var self = this;
 
-    // Capture the docY of the 35% line before we mutate
+    // pin the 35% line (so the page doesn't "shoot")
     var vh = window.innerHeight || document.documentElement.clientHeight;
     var anchorDocYBefore = (window.pageYOffset || document.documentElement.scrollTop || 0)
-                         + vh * ViewportAnchorFraction;
+                         + vh * ViewportAnchorFraction + OpenOffsetPx;
 
-    // If another animation is in-flight, snap to its end state first
     if (this._isAnimating) {
       element.style.transition = "";
       element.style.height = endHeight > 0 ? (endHeight + "px") : "";
@@ -194,35 +179,28 @@
 
     this._isAnimating = true;
 
-    // Phase 1: set start
     element.style.height = Math.max(0, startHeight) + "px";
-    void element.offsetHeight; // reflow
+    void element.offsetHeight;
 
-    // Phase 2: animate to target
     element.style.transition = "height " + AnimationDurationMs + "ms ease";
     element.style.height = Math.max(0, endHeight) + "px";
 
     function onEnd(e) {
       if (e.propertyName !== "height") return;
-
       element.removeEventListener("transitionend", onEnd);
-      element.style.transition = "";
 
-      // If opening, let it breathe for late media/layout by switching to auto
-      if (endHeight > 0) {
-        element.style.height = "auto";
-      } else {
-        element.style.height = "";
-      }
+      element.style.transition = "";
+      element.style.height = (endHeight > 0) ? "auto" : "";
 
       self._isAnimating = false;
 
-      // Restore the 35% line after layout settles (double-rAF for 'auto' to commit)
+      // restore the 35%+offset line after layout settles
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           var anchorDocYAfter =
             (window.pageYOffset || document.documentElement.scrollTop || 0) +
-            (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction;
+            (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction +
+            OpenOffsetPx;
 
           var delta = anchorDocYAfter - anchorDocYBefore;
           if (Math.abs(delta) > 0.5) window.scrollBy(0, -delta);
@@ -238,8 +216,7 @@
       var drawer = this._drawers[i];
       var summary = drawer.querySelector("[data-drawer-summary]");
       if (!summary) continue;
-      var isOpen = drawer.classList.contains("Drawer--Open");
-      summary.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      summary.setAttribute("aria-expanded", drawer.classList.contains("Drawer--Open") ? "true" : "false");
     }
   };
 
@@ -260,7 +237,6 @@
         } else {
           drawer.classList.remove("Drawer--NoTail");
         }
-        // leave height as 'auto' for open panels (AnimateHeight sets it)
         content.style.height = "auto";
       } else {
         drawer.classList.remove("Drawer--NoTail");
@@ -269,13 +245,13 @@
     }
   };
 
-  // Keep an open drawer flexible if media sizes later
+  // Keep an open drawer healthy if media sizes late
   DrawerController.prototype._wireMediaAutoGrow = function (content) {
     var medias = content.querySelectorAll("video, img, iframe");
     function maybeSync() {
       var d = content.closest("[data-drawer]");
       if (!d || !d.classList.contains("Drawer--Open")) return;
-      // We keep height:auto while open, so growth is natural.
+      content.style.height = "auto"; // let it breathe
     }
     for (var i = 0; i < medias.length; i++) {
       var m = medias[i];
@@ -285,30 +261,24 @@
     }
   };
 
-  // ---------- Auto open/close on scroll via "line" (IO at 35%) ----------
+  // ---------- Auto open on scroll (titles only) ----------
 
   DrawerController.prototype.EnableScrollAutoToggle = function () {
     var self = this;
 
-    // Observe at the virtual 35% line
     this._observer = new IntersectionObserver(function (entries) {
       self._OnIntersections(entries);
     }, {
       root: null,
       threshold: 0,
-      rootMargin: RootMarginForAnchor
+      rootMargin: computeRootMargin()
     });
 
-    // Observe each open marker (summary) and each close marker (content end)
-    for (var i = 0; i < this._drawers.length; i++) {
-      var d = this._drawers[i];
-      var summary = d.querySelector("[data-drawer-summary]");
-      var closeMarker = d.querySelector("[data-close-marker]");
-      if (summary) this._observer.observe(summary);
-      if (closeMarker) this._observer.observe(closeMarker);
+    // Observe only the titles (open markers)
+    for (var i = 0; i < this._summaries.length; i++) {
+      this._observer.observe(this._summaries[i]);
     }
 
-    // Direction tracking only
     function onScroll() {
       var y = window.pageYOffset || 0;
       self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : self._scrollDirection;
@@ -320,52 +290,44 @@
 
   DrawerController.prototype._OnIntersections = function (entries) {
     var now = this._now();
-
-    // ignore during boot/programmatic open suppression
     if (this._booting || now < this._suppressIOUntil) return;
 
-    // process in chronological order
+    // chronological
     entries.sort(function (a, b) { return a.time - b.time; });
 
     for (var idx = 0; idx < entries.length; idx++) {
       var entry = entries[idx];
-      if (!entry.isIntersecting) continue;       // only when entering the slice
-      if (this._scrollDirection !== 1) continue; // unidirectional (down only)
+      if (!entry.isIntersecting) continue;     // entering the slice only
+      if (this._scrollDirection !== 1) continue; // down only
 
-      var target = entry.target;
-      var drawer = target.closest("[data-drawer]");
+      var summary = entry.target;
+      if (!summary.hasAttribute("data-drawer-summary")) continue;
+
+      var drawer = summary.closest("[data-drawer]");
       if (!drawer) continue;
 
-      // respect lockout
+      // Additional geometric guard: ensure the summary is actually below the anchor by our offset
+      var rect = summary.getBoundingClientRect();
+      var anchorY = (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction + OpenOffsetPx;
+      if (rect.top > anchorY) continue; // not far enough yet
+
       var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
       if (lockedUntil > now) continue;
 
-      if (target.matches("[data-drawer-summary]")) {
-        if (!drawer.classList.contains("Drawer--Open")) {
-          this.OpenDrawer(drawer);
-          if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
-        }
-      } else if (target.matches("[data-close-marker]")) {
-        if (drawer.classList.contains("Drawer--Open")) {
-          this.CloseAndLock(drawer);
-          var next = this._NextDrawer(drawer);
-          if (next) {
-            var lockedNext = parseFloat(next.dataset.lockedUntil || "0");
-            if (lockedNext <= now && !next.classList.contains("Drawer--Open")) {
-              this.OpenDrawer(next);
-              if (OnlyOneOpenAtATime) this.CloseSiblings(next);
-            }
-          }
-        }
+      if (!drawer.classList.contains("Drawer--Open")) {
+        this.OpenDrawer(drawer);
+        if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
+
+        // brief suppression so the open-induced layout shift doesn't chain-trigger
+        this._suppressIOUntil = this._now() + 150;
       }
     }
   };
 
-  DrawerController.prototype._NextDrawer = function (drawer) {
-    for (var i = 0; i < this._drawers.length; i++) {
-      if (this._drawers[i] === drawer) {
-        return (i + 1 < this._drawers.length) ? this._drawers[i + 1] : null;
-      }
+  DrawerController.prototype._FindAncestorDrawer = function (node) {
+    while (node && node !== document) {
+      if (node.hasAttribute && node.hasAttribute("data-drawer")) return node;
+      node = node.parentNode;
     }
     return null;
   };
@@ -401,64 +363,13 @@
     this.ScrollToDrawer(openId);
   };
 
-  DrawerController.prototype._FindAncestorDrawer = function (node) {
-    while (node && node !== document) {
-      if (node.hasAttribute && node.hasAttribute("data-drawer")) return node;
-      node = node.parentNode;
-    }
-    return null;
-  };
-
   // ---------- Boot ----------
 
   function InitializeDrawersWhenReady() {
-  document.documentElement.style.setProperty(
-    "--ViewportAnchorTriggerLinePositionVh",
-    (ViewportAnchorFraction * 100) + "vh"
-  );
-
-  // Optional: visual guide line
-  var guide = document.createElement("div");
-  guide.className = "TriggerLine";
-  document.body.appendChild(guide);
-
-  var instance = new DrawerController(document);
-  window.DrawersController = instance;
-
-  // Single authoritative "open Intro" (IO temporarily suppressed)
-  function openIntro() {
-    var intro = document.getElementById("Intro");
-    if (!intro) {
-      instance._booting = false;
-      return;
-    }
-
-    // Keep IO quiet while we do this programmatically
-    instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
-
-    // Open using the controller (ensures height/ARIA/tail are correct)
-    instance.OpenById("Intro");
-
-    // Try to play the hero video (muted/inline)
-    var vid = intro.querySelector("video");
-    if (vid) {
-      try {
-        vid.muted = true;
-        vid.playsInline = true;
-        var p = vid.play();
-        if (p && typeof p.catch === "function") p.catch(function () {});
-      } catch (e) {}
-    }
-
-    // Release boot flag so IO takes over naturally
-    setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
-  }
-
-  // Wait two RAFs so CSS/layout (including video sizing rules) have committed
-  requestAnimationFrame(function () {
-    requestAnimationFrame(openIntro);
-  });
-}
+    document.documentElement.style.setProperty(
+      "--ViewportAnchorTriggerLinePositionVh",
+      (ViewportAnchorFraction * 100) + "vh"
+    );
 
     // Optional: visual guide line
     var guide = document.createElement("div");
@@ -468,37 +379,27 @@
     var instance = new DrawerController(document);
     window.DrawersController = instance;
 
-    // After layout, ensure Intro is open (if not already) and start its video
-    var openIntro = function () {
+    // Open Intro once layout settles (and keep IO quiet while we do it)
+    function openIntro() {
       var intro = document.getElementById("Intro");
-      if (!intro) {
-        instance._booting = false;
-        return;
-      }
+      if (!intro) { instance._booting = false; return; }
 
-      // suppress IO briefly so it doesn't fight this programmatic work
       instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
+      instance.OpenById("Intro");
 
-      if (!intro.classList.contains("Drawer--Open")) {
-        instance.OpenById("Intro");
-      }
-
-      // try to play the hero video (muted/inline)
       var vid = intro.querySelector("video");
       if (vid) {
         try {
           vid.muted = true;
           vid.playsInline = true;
           var p = vid.play();
-          if (p && typeof p.catch === "function") { p.catch(function(){ /* ignore */ }); }
-        } catch(e) { /* ignore play errors */ }
+          if (p && typeof p.catch === "function") p.catch(function(){});
+        } catch (e) {}
       }
 
-      // release boot flag after a tick so IO can take over
       setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
-    };
+    }
 
-    // Wait two RAFs so styles/layout (including video CSS) settle
     requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
   }
 
