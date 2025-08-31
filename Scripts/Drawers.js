@@ -82,7 +82,7 @@
     }
   };
 
-  DrawerController.prototype.OnToggleRequested = function (evt) {
+    DrawerController.prototype.OnToggleRequested = function (evt) {
     if (this._isAnimating) return;
     var summary = evt.currentTarget;
     var drawer = summary.closest ? summary.closest("[data-drawer]") : this._FindAncestorDrawer(summary);
@@ -92,6 +92,10 @@
       this.CloseAndLock(drawer);
     } else {
       this.OpenDrawer(drawer);
+
+      // 🛡️ Suppress IO briefly so the open-induced layout shift doesn't auto-open the next drawer
+      this._suppressIOUntil = this._now() + 450;   // << add this
+
       if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
   };
@@ -373,11 +377,15 @@
 
   // ---------- Public helpers ----------
 
-  DrawerController.prototype.OpenById = function (id) {
+    DrawerController.prototype.OpenById = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
     if (!drawer.classList.contains("Drawer--Open")) {
       this.OpenDrawer(drawer);
+
+      // 🛡️ Suppress IO to avoid chain-opening via layout shift
+      this._suppressIOUntil = this._now() + 450;   // << add this
+
       if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
   };
