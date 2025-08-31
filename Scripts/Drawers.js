@@ -16,8 +16,7 @@
   // Suppress IO reactions briefly during boot/programmatic open
   var SuppressIOAfterBootMs = 400;
 
-  // A thin horizontal slice around our line using rootMargin
-  // (we'll keep the percent slice stable; offset is enforced with a geometry guard)
+  // Percent slice around our line (offset enforced with a geometry guard)
   function computeRootMargin() {
     var topPct = -(ViewportAnchorFraction * 100);
     var botPct = -(100 - ViewportAnchorFraction * 100);
@@ -110,7 +109,7 @@
       drawer.classList.remove("Drawer--NoTail");
     }
 
-    var startHeight = content.getBoundingClientRect().height;
+    var startHeight = content.getBoundingClientRect().height | 0;
 
     // Pin current height so we don't collapse while we prep animation
     content.style.height = Math.max(0, startHeight) + "px";
@@ -120,44 +119,41 @@
 
     var self = this;
 
-    // ---- OPTION A: wait for video metadata if present (and not ready) ----
-    var vid = content.querySelector("video");
-    var needsMeta =
-      vid &&
-      // not ready yet → no intrinsic dimensions
-      (!vid.videoWidth || !vid.videoHeight || vid.readyState < 1);
+    // Measure end height with inline height cleared so CSS (dvh clamp) can apply
+    function measureEndHeight() {
+      var prevH = content.style.height;
+      var prevT = content.style.transition;
+      content.style.transition = "";
+      content.style.height = ""; // let CSS open-state height apply
+      void content.offsetHeight;
 
-    // One-shot runner to measure true final height and animate
-    var ran = false;
-    function runAnimateAfterLayout() {
-      if (ran) return; // guard against double-fire
-      ran = true;
-      // Make sure layout includes the open-state CSS
-      requestAnimationFrame(function () {
-        var endHeight = content.getBoundingClientRect().height || content.scrollHeight;
-        self.AnimateHeight(content, startHeight, endHeight);
-      });
-    }
-
-    if (needsMeta) {
-      // In case metadata never fires (bad encodes), add a slow fallback
-      var metaTimeout = setTimeout(runAnimateAfterLayout, 1200);
-
-      var onMeta = function () {
-        clearTimeout(metaTimeout);
-        vid.removeEventListener("loadedmetadata", onMeta);
-        runAnimateAfterLayout();
-      };
-      try {
-        vid.addEventListener("loadedmetadata", onMeta, { once: true });
-      } catch (_) {
-        // some browsers ignore {once}; still safe due to our guard
-        vid.addEventListener("loadedmetadata", onMeta);
+      var end = content.getBoundingClientRect().height;
+      if (!end || end < 1) {
+        // fallback for non-flow children (absolute video): scrollHeight may still be 0; that's ok
+        end = content.scrollHeight;
       }
-    } else {
-      // Normal path (no video or already has metadata)
-      runAnimateAfterLayout();
+
+      // Restore start height for the animation
+      content.style.height = prevH || (Math.max(0, startHeight) + "px");
+      content.style.transition = prevT;
+      void content.offsetHeight;
+      return Math.max(0, Math.round(end));
     }
+
+    // Run after layout applies the open class
+    requestAnimationFrame(function () {
+      var endHeight = measureEndHeight();
+
+      // Fast-path: if there's nothing to animate, finish immediately (prevents lock)
+      if (Math.abs(endHeight - startHeight) < 0.5) {
+        content.style.transition = "";
+        content.style.height = "auto";
+        self._isAnimating = false;
+        return;
+      }
+
+      self.AnimateHeight(content, startHeight, endHeight);
+    });
 
     // Keep open panels healthy if media sizes even later
     this._wireMediaAutoGrow(content);
@@ -180,6 +176,14 @@
     }
 
     var endHeight = 0;
+    // If nothing to animate, finish immediately
+    if (Math.abs(endHeight - startHeight) < 0.5) {
+      content.style.transition = "";
+      content.style.height = "";
+      this._isAnimating = false;
+      return;
+    }
+
     this.AnimateHeight(content, startHeight, endHeight);
   };
 
@@ -287,8 +291,7 @@
     function maybeSync() {
       var d = content.closest("[data-drawer]");
       if (!d || !d.classList.contains("Drawer--Open")) return;
-      // we keep 'auto' for open panels; just ensure it's not stuck in px
-      content.style.height = "auto";
+      content.style.height = "auto"; // let it breathe
     }
     for (var i = 0; i < medias.length; i++) {
       var m = medias[i];
