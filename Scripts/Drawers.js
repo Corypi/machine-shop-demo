@@ -17,14 +17,11 @@
   var SuppressIOAfterBootMs = 400;
 
   // A thin horizontal slice around our line using rootMargin
-  // (top/bottom percentages create the "slice"; px offset slides it downward)
+  // (we'll keep the percent slice stable; offset is enforced with a geometry guard)
   function computeRootMargin() {
     var topPct = -(ViewportAnchorFraction * 100);
     var botPct = -(100 - ViewportAnchorFraction * 100);
-    // Shift slice downward by OpenOffsetPx:
-    // more negative on top, less negative on bottom by the same px
-    return (topPct.toFixed(3) + "% 0px " + botPct.toFixed(3) + "% 0px")
-           .replace("% 0px", "% 0px") + ""; // (keep as string)
+    return topPct.toFixed(3) + "% 0px " + botPct.toFixed(3) + "% 0px";
   }
 
   // ============================================
@@ -115,16 +112,54 @@
 
     var startHeight = content.getBoundingClientRect().height;
 
+    // Pin current height so we don't collapse while we prep animation
+    content.style.height = Math.max(0, startHeight) + "px";
+
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
     var self = this;
-    requestAnimationFrame(function () {
-      // Use client height (respects clamped dvh rules) as target
-      var endHeight = content.getBoundingClientRect().height || content.scrollHeight;
-      self.AnimateHeight(content, startHeight, endHeight);
-    });
 
+    // ---- OPTION A: wait for video metadata if present (and not ready) ----
+    var vid = content.querySelector("video");
+    var needsMeta =
+      vid &&
+      // not ready yet → no intrinsic dimensions
+      (!vid.videoWidth || !vid.videoHeight || vid.readyState < 1);
+
+    // One-shot runner to measure true final height and animate
+    var ran = false;
+    function runAnimateAfterLayout() {
+      if (ran) return; // guard against double-fire
+      ran = true;
+      // Make sure layout includes the open-state CSS
+      requestAnimationFrame(function () {
+        var endHeight = content.getBoundingClientRect().height || content.scrollHeight;
+        self.AnimateHeight(content, startHeight, endHeight);
+      });
+    }
+
+    if (needsMeta) {
+      // In case metadata never fires (bad encodes), add a slow fallback
+      var metaTimeout = setTimeout(runAnimateAfterLayout, 1200);
+
+      var onMeta = function () {
+        clearTimeout(metaTimeout);
+        vid.removeEventListener("loadedmetadata", onMeta);
+        runAnimateAfterLayout();
+      };
+      try {
+        vid.addEventListener("loadedmetadata", onMeta, { once: true });
+      } catch (_) {
+        // some browsers ignore {once}; still safe due to our guard
+        vid.addEventListener("loadedmetadata", onMeta);
+      }
+    } else {
+      // Normal path (no video or already has metadata)
+      runAnimateAfterLayout();
+    }
+
+    // Keep open panels healthy if media sizes even later
     this._wireMediaAutoGrow(content);
   };
 
@@ -173,6 +208,7 @@
                          + vh * ViewportAnchorFraction + OpenOffsetPx;
 
     if (this._isAnimating) {
+      // snap any in-flight to end state to avoid lock
       element.style.transition = "";
       element.style.height = endHeight > 0 ? (endHeight + "px") : "";
     }
@@ -251,13 +287,14 @@
     function maybeSync() {
       var d = content.closest("[data-drawer]");
       if (!d || !d.classList.contains("Drawer--Open")) return;
-      content.style.height = "auto"; // let it breathe
+      // we keep 'auto' for open panels; just ensure it's not stuck in px
+      content.style.height = "auto";
     }
     for (var i = 0; i < medias.length; i++) {
       var m = medias[i];
-      m.addEventListener("loadedmetadata", maybeSync, { passive: true });
-      m.addEventListener("loadeddata",     maybeSync, { passive: true });
-      m.addEventListener("load",           maybeSync, { passive: true });
+      m.addEventListener("loadedmetadata", maybeSync);
+      m.addEventListener("loadeddata",     maybeSync);
+      m.addEventListener("load",           maybeSync);
     }
   };
 
@@ -297,8 +334,8 @@
 
     for (var idx = 0; idx < entries.length; idx++) {
       var entry = entries[idx];
-      if (!entry.isIntersecting) continue;     // entering the slice only
-      if (this._scrollDirection !== 1) continue; // down only
+      if (!entry.isIntersecting) continue;        // entering the slice only
+      if (this._scrollDirection !== 1) continue;  // down only
 
       var summary = entry.target;
       if (!summary.hasAttribute("data-drawer-summary")) continue;
@@ -306,7 +343,7 @@
       var drawer = summary.closest("[data-drawer]");
       if (!drawer) continue;
 
-      // Additional geometric guard: ensure the summary is actually below the anchor by our offset
+      // Geometric guard: ensure the summary is actually below the anchor by our offset
       var rect = summary.getBoundingClientRect();
       var anchorY = (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction + OpenOffsetPx;
       if (rect.top > anchorY) continue; // not far enough yet
@@ -317,7 +354,6 @@
       if (!drawer.classList.contains("Drawer--Open")) {
         this.OpenDrawer(drawer);
         if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
-
         // brief suppression so the open-induced layout shift doesn't chain-trigger
         this._suppressIOUntil = this._now() + 150;
       }
