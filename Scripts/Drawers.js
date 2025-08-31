@@ -304,6 +304,52 @@
       m.addEventListener("load",           maybeSync);
     }
   };
+  
+// --- Auto-advance video drawers (safe: only if playback truly started) ---
+DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
+  var drawer = document.getElementById(drawerId);
+  if (!drawer) return;
+  var content = drawer.querySelector("[data-drawer-content]");
+  var video   = content ? content.querySelector("video") : null;
+  if (!video) return;
+
+  var self = this;
+  var started = false; // becomes true only after we actually see playback begin
+
+  function tryPlay() {
+    try {
+      video.muted = true;
+      video.playsInline = true;
+      var p = video.play();
+      if (p && typeof p.catch === "function") p.catch(function(){});
+    } catch(e) {}
+  }
+
+  video.addEventListener("playing", function () { started = true; }, { passive:true });
+  video.addEventListener("loadedmetadata", function () {
+    // If Intro opens from top with autoplay, kick it once metadata is ready.
+    // (Harmless if it’s already playing.)
+    tryPlay();
+  }, { passive:true });
+
+  video.addEventListener("ended", function () {
+    // Only advance if we truly started playback (avoid “instant end” glitches)
+    if (!started) return;
+
+    // Don’t do anything if the current drawer got closed manually
+    if (!drawer.classList.contains("Drawer--Open")) return;
+
+    // Keep IO quiet while we programmatically advance
+    self._suppressIOUntil = self._now() + 600;
+
+    if (nextId) {
+      self.OpenThenCloseAndScroll(nextId, drawerId);
+    } else {
+      // If no nextId is provided, just close this one gracefully
+      self.CloseAndLock(drawer);
+    }
+  }, { passive:true });
+};
 
   // ---------- Auto open on scroll (titles only) ----------
 
@@ -427,25 +473,30 @@
     window.DrawersController = instance;
 
     // Open Intro once layout settles (and keep IO quiet while we do it)
-    function openIntro() {
-      var intro = document.getElementById("Intro");
-      if (!intro) { instance._booting = false; return; }
+function openIntro() {
+  var intro = document.getElementById("Intro");
+  if (!intro) { instance._booting = false; return; }
 
-      instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
-      instance.OpenById("Intro");
+  // Wire safe auto-advance: Intro -> About
+  instance._wireAutoAdvanceVideo("Intro", "About");  // << add this line
+  // (Optionally wire Tour to advance to Capabilities, etc.)
+  // instance._wireAutoAdvanceVideo("Tour", "Capabilities");
 
-      var vid = intro.querySelector("video");
-      if (vid) {
-        try {
-          vid.muted = true;
-          vid.playsInline = true;
-          var p = vid.play();
-          if (p && typeof p.catch === "function") p.catch(function(){});
-        } catch (e) {}
-      }
+  instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
+  instance.OpenById("Intro");
 
-      setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
-    }
+  var vid = intro.querySelector("video");
+  if (vid) {
+    try {
+      vid.muted = true;
+      vid.playsInline = true;
+      var p = vid.play();
+      if (p && typeof p.catch === "function") p.catch(function(){});
+    } catch (e) {}
+  }
+
+  setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
+}
 
     requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
   }
