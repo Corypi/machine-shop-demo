@@ -82,7 +82,7 @@
     }
   };
 
-    DrawerController.prototype.OnToggleRequested = function (evt) {
+  DrawerController.prototype.OnToggleRequested = function (evt) {
     if (this._isAnimating) return;
     var summary = evt.currentTarget;
     var drawer = summary.closest ? summary.closest("[data-drawer]") : this._FindAncestorDrawer(summary);
@@ -94,7 +94,7 @@
       this.OpenDrawer(drawer);
 
       // 🛡️ Suppress IO briefly so the open-induced layout shift doesn't auto-open the next drawer
-      this._suppressIOUntil = this._now() + 450;   // << add this
+      this._suppressIOUntil = this._now() + 450;
 
       if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
@@ -133,7 +133,6 @@
 
       var end = content.getBoundingClientRect().height;
       if (!end || end < 1) {
-        // fallback for non-flow children (absolute video): scrollHeight may still be 0; that's ok
         end = content.scrollHeight;
       }
 
@@ -151,7 +150,14 @@
       // Fast-path: if there's nothing to animate, finish immediately (prevents lock)
       if (Math.abs(endHeight - startHeight) < 0.5) {
         content.style.transition = "";
-        content.style.height = "auto";
+        // 🔧 keep clamp-driven drawers on CSS height; others can be auto
+        if (drawer.classList.contains("Drawer--FixedHero") ||
+            drawer.classList.contains("Drawer--FixedShort") ||
+            content.classList.contains("DrawerContent--Fill")) {
+          content.style.height = "";   // let CSS clamp win
+        } else {
+          content.style.height = "auto";
+        }
         self._isAnimating = false;
         return;
       }
@@ -234,7 +240,21 @@
       element.removeEventListener("transitionend", onEnd);
 
       element.style.transition = "";
-      element.style.height = (endHeight > 0) ? "auto" : "";
+
+      // 🔧 IMPORTANT:
+      // For fixed-video drawers, clear inline height so CSS clamp applies.
+      // For regular content, 'auto' is fine.
+      var drawer = element.closest && element.closest(".Drawer");
+      var useCssClamp = drawer &&
+                        (drawer.classList.contains("Drawer--FixedHero") ||
+                         drawer.classList.contains("Drawer--FixedShort")) ||
+                        element.classList.contains("DrawerContent--Fill");
+
+      if (endHeight > 0) {
+        element.style.height = useCssClamp ? "" : "auto";
+      } else {
+        element.style.height = "";
+      }
 
       self._isAnimating = false;
 
@@ -281,7 +301,17 @@
         } else {
           drawer.classList.remove("Drawer--NoTail");
         }
-        content.style.height = "auto";
+
+        // 🔧 Match AnimateHeight behavior:
+        // fixed-video drawers rely on CSS clamp; others can use 'auto'
+        if (drawer.classList.contains("Drawer--FixedHero") ||
+            drawer.classList.contains("Drawer--FixedShort") ||
+            content.classList.contains("DrawerContent--Fill")) {
+          content.style.height = "";      // let CSS rule control height
+        } else {
+          content.style.height = "auto";  // normal content
+        }
+
       } else {
         drawer.classList.remove("Drawer--NoTail");
         content.style.height = "";
@@ -295,7 +325,13 @@
     function maybeSync() {
       var d = content.closest("[data-drawer]");
       if (!d || !d.classList.contains("Drawer--Open")) return;
-      content.style.height = "auto"; // let it breathe
+      // For fixed-video drawers, do nothing (CSS clamp rules).
+      // For regular content, allow natural growth.
+      if (!(d.classList.contains("Drawer--FixedHero") ||
+            d.classList.contains("Drawer--FixedShort") ||
+            content.classList.contains("DrawerContent--Fill"))) {
+        content.style.height = "auto";
+      }
     }
     for (var i = 0; i < medias.length; i++) {
       var m = medias[i];
@@ -304,52 +340,43 @@
       m.addEventListener("load",           maybeSync);
     }
   };
-  
-// --- Auto-advance video drawers (safe: only if playback truly started) ---
-DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
-  var drawer = document.getElementById(drawerId);
-  if (!drawer) return;
-  var content = drawer.querySelector("[data-drawer-content]");
-  var video   = content ? content.querySelector("video") : null;
-  if (!video) return;
 
-  var self = this;
-  var started = false; // becomes true only after we actually see playback begin
+  // --- Auto-advance video drawers (safe: only if playback truly started) ---
+  DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
+    var drawer = document.getElementById(drawerId);
+    if (!drawer) return;
+    var content = drawer.querySelector("[data-drawer-content]");
+    var video   = content ? content.querySelector("video") : null;
+    if (!video) return;
 
-  function tryPlay() {
-    try {
-      video.muted = true;
-      video.playsInline = true;
-      var p = video.play();
-      if (p && typeof p.catch === "function") p.catch(function(){});
-    } catch(e) {}
-  }
+    var self = this;
+    var started = false;
 
-  video.addEventListener("playing", function () { started = true; }, { passive:true });
-  video.addEventListener("loadedmetadata", function () {
-    // If Intro opens from top with autoplay, kick it once metadata is ready.
-    // (Harmless if it’s already playing.)
-    tryPlay();
-  }, { passive:true });
-
-  video.addEventListener("ended", function () {
-    // Only advance if we truly started playback (avoid “instant end” glitches)
-    if (!started) return;
-
-    // Don’t do anything if the current drawer got closed manually
-    if (!drawer.classList.contains("Drawer--Open")) return;
-
-    // Keep IO quiet while we programmatically advance
-    self._suppressIOUntil = self._now() + 600;
-
-    if (nextId) {
-      self.OpenThenCloseAndScroll(nextId, drawerId);
-    } else {
-      // If no nextId is provided, just close this one gracefully
-      self.CloseAndLock(drawer);
+    function tryPlay() {
+      try {
+        video.muted = true;
+        video.playsInline = true;
+        var p = video.play();
+        if (p && typeof p.catch === "function") p.catch(function(){});
+      } catch(e) {}
     }
-  }, { passive:true });
-};
+
+    video.addEventListener("playing", function () { started = true; }, { passive:true });
+    video.addEventListener("loadedmetadata", function () { tryPlay(); }, { passive:true });
+
+    video.addEventListener("ended", function () {
+      if (!started) return;
+      if (!drawer.classList.contains("Drawer--Open")) return;
+
+      self._suppressIOUntil = self._now() + 600;
+
+      if (nextId) {
+        self.OpenThenCloseAndScroll(nextId, drawerId);
+      } else {
+        self.CloseAndLock(drawer);
+      }
+    }, { passive:true });
+  };
 
   // ---------- Auto open on scroll (titles only) ----------
 
@@ -407,7 +434,6 @@ DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
       if (!drawer.classList.contains("Drawer--Open")) {
         this.OpenDrawer(drawer);
         if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
-        // brief suppression so the open-induced layout shift doesn't chain-trigger
         this._suppressIOUntil = this._now() + 150;
       }
     }
@@ -423,15 +449,12 @@ DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
 
   // ---------- Public helpers ----------
 
-    DrawerController.prototype.OpenById = function (id) {
+  DrawerController.prototype.OpenById = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
     if (!drawer.classList.contains("Drawer--Open")) {
       this.OpenDrawer(drawer);
-
-      // 🛡️ Suppress IO to avoid chain-opening via layout shift
-      this._suppressIOUntil = this._now() + 450;   // << add this
-
+      this._suppressIOUntil = this._now() + 450;
       if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
     }
   };
@@ -473,30 +496,29 @@ DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
     window.DrawersController = instance;
 
     // Open Intro once layout settles (and keep IO quiet while we do it)
-function openIntro() {
-  var intro = document.getElementById("Intro");
-  if (!intro) { instance._booting = false; return; }
+    function openIntro() {
+      var intro = document.getElementById("Intro");
+      if (!intro) { instance._booting = false; return; }
 
-  // Wire safe auto-advance: Intro -> About
-  instance._wireAutoAdvanceVideo("Intro", "About");  // << add this line
-  // (Optionally wire Tour to advance to Capabilities, etc.)
-  // instance._wireAutoAdvanceVideo("Tour", "Capabilities");
+      // Wire safe auto-advance: Intro -> About
+      instance._wireAutoAdvanceVideo("Intro", "About");
+      // instance._wireAutoAdvanceVideo("Tour", "Capabilities");
 
-  instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
-  instance.OpenById("Intro");
+      instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
+      instance.OpenById("Intro");
 
-  var vid = intro.querySelector("video");
-  if (vid) {
-    try {
-      vid.muted = true;
-      vid.playsInline = true;
-      var p = vid.play();
-      if (p && typeof p.catch === "function") p.catch(function(){});
-    } catch (e) {}
-  }
+      var vid = intro.querySelector("video");
+      if (vid) {
+        try {
+          vid.muted = true;
+          vid.playsInline = true;
+          var p = vid.play();
+          if (p && typeof p.catch === "function") p.catch(function(){});
+        } catch (e) {}
+      }
 
-  setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
-}
+      setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
+    }
 
     requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
   }
