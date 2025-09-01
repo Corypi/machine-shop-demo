@@ -143,14 +143,12 @@
       return Math.max(0, Math.round(end));
     }
 
-    // Run after layout applies the open class
     requestAnimationFrame(function () {
       var endHeight = measureEndHeight();
 
       // Fast-path: if there's nothing to animate, finish immediately (prevents lock)
       if (Math.abs(endHeight - startHeight) < 0.5) {
         content.style.transition = "";
-        // 🔧 keep clamp-driven drawers on CSS height; others can be auto
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
@@ -186,7 +184,6 @@
     }
 
     var endHeight = 0;
-    // If nothing to animate, finish immediately
     if (Math.abs(endHeight - startHeight) < 0.5) {
       content.style.transition = "";
       content.style.height = "";
@@ -216,13 +213,11 @@
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
     var self = this;
 
-    // pin the 35% line (so the page doesn't "shoot")
     var vh = window.innerHeight || document.documentElement.clientHeight;
     var anchorDocYBefore = (window.pageYOffset || document.documentElement.scrollTop || 0)
                          + vh * ViewportAnchorFraction + OpenOffsetPx;
 
     if (this._isAnimating) {
-      // snap any in-flight to end state to avoid lock
       element.style.transition = "";
       element.style.height = endHeight > 0 ? (endHeight + "px") : "";
     }
@@ -241,9 +236,6 @@
 
       element.style.transition = "";
 
-      // 🔧 IMPORTANT:
-      // For fixed-video drawers, clear inline height so CSS clamp applies.
-      // For regular content, 'auto' is fine.
       var drawer = element.closest && element.closest(".Drawer");
       var useCssClamp = drawer &&
                         (drawer.classList.contains("Drawer--FixedHero") ||
@@ -258,7 +250,6 @@
 
       self._isAnimating = false;
 
-      // restore the 35%+offset line after layout settles
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           var anchorDocYAfter =
@@ -302,16 +293,13 @@
           drawer.classList.remove("Drawer--NoTail");
         }
 
-        // 🔧 Match AnimateHeight behavior:
-        // fixed-video drawers rely on CSS clamp; others can use 'auto'
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
-          content.style.height = "";      // let CSS rule control height
+          content.style.height = ""; 
         } else {
-          content.style.height = "auto";  // normal content
+          content.style.height = "auto";
         }
-
       } else {
         drawer.classList.remove("Drawer--NoTail");
         content.style.height = "";
@@ -319,14 +307,11 @@
     }
   };
 
-  // Keep an open drawer healthy if media sizes late
   DrawerController.prototype._wireMediaAutoGrow = function (content) {
     var medias = content.querySelectorAll("video, img, iframe");
     function maybeSync() {
       var d = content.closest("[data-drawer]");
       if (!d || !d.classList.contains("Drawer--Open")) return;
-      // For fixed-video drawers, do nothing (CSS clamp rules).
-      // For regular content, allow natural growth.
       if (!(d.classList.contains("Drawer--FixedHero") ||
             d.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill"))) {
@@ -341,7 +326,7 @@
     }
   };
 
-  // --- Auto-advance video drawers (safe: only if playback truly started) ---
+  // --- Auto-advance video drawers ---
   DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
     var drawer = document.getElementById(drawerId);
     if (!drawer) return;
@@ -378,8 +363,7 @@
     }, { passive:true });
   };
 
-  // ---------- Auto open on scroll (titles only) ----------
-
+  // ---------- Auto open on scroll ----------
   DrawerController.prototype.EnableScrollAutoToggle = function () {
     var self = this;
 
@@ -391,7 +375,6 @@
       rootMargin: computeRootMargin()
     });
 
-    // Observe only the titles (open markers)
     for (var i = 0; i < this._summaries.length; i++) {
       this._observer.observe(this._summaries[i]);
     }
@@ -409,13 +392,12 @@
     var now = this._now();
     if (this._booting || now < this._suppressIOUntil) return;
 
-    // chronological
     entries.sort(function (a, b) { return a.time - b.time; });
 
     for (var idx = 0; idx < entries.length; idx++) {
       var entry = entries[idx];
-      if (!entry.isIntersecting) continue;        // entering the slice only
-      if (this._scrollDirection !== 1) continue;  // down only
+      if (!entry.isIntersecting) continue;
+      if (this._scrollDirection !== 1) continue;
 
       var summary = entry.target;
       if (!summary.hasAttribute("data-drawer-summary")) continue;
@@ -423,10 +405,9 @@
       var drawer = summary.closest("[data-drawer]");
       if (!drawer) continue;
 
-      // Geometric guard: ensure the summary is actually below the anchor by our offset
       var rect = summary.getBoundingClientRect();
       var anchorY = (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction + OpenOffsetPx;
-      if (rect.top > anchorY) continue; // not far enough yet
+      if (rect.top > anchorY) continue;
 
       var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
       if (lockedUntil > now) continue;
@@ -448,7 +429,6 @@
   };
 
   // ---------- Public helpers ----------
-
   DrawerController.prototype.OpenById = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
@@ -480,14 +460,12 @@
   };
 
   // ---------- Boot ----------
-
   function InitializeDrawersWhenReady() {
     document.documentElement.style.setProperty(
       "--ViewportAnchorTriggerLinePositionVh",
       (ViewportAnchorFraction * 100) + "vh"
     );
 
-    // Optional: visual guide line
     var guide = document.createElement("div");
     guide.className = "TriggerLine";
     document.body.appendChild(guide);
@@ -495,14 +473,11 @@
     var instance = new DrawerController(document);
     window.DrawersController = instance;
 
-    // Open Intro once layout settles (and keep IO quiet while we do it)
     function openIntro() {
       var intro = document.getElementById("Intro");
       if (!intro) { instance._booting = false; return; }
 
-      // Wire safe auto-advance: Intro -> About
       instance._wireAutoAdvanceVideo("Intro", "About");
-      // instance._wireAutoAdvanceVideo("Tour", "Capabilities");
 
       instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
       instance.OpenById("Intro");
@@ -525,9 +500,3 @@
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", InitializeDrawersWhenReady);
-  } else {
-    InitializeDrawersWhenReady();
-  }
-
-  window.DrawerController = DrawerController;
-})();
