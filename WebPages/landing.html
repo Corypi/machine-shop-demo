@@ -8,8 +8,8 @@
 </head>
 <body>
 
-<!-- Thin visual marker for the auto-toggle trigger (35% from top) -->
-<div class="TriggerLine" aria-hidden="true"></div>
+  <!-- Thin visual marker for the auto-toggle trigger (35% from top) -->
+  <div class="TriggerLine" aria-hidden="true"></div>
 
   <!-- ======================================================
        Header
@@ -23,38 +23,38 @@
        Main
   ======================================================= -->
   <main class="Container" id="Top">
-    <!--<h2 class="SectionTitle">Explore</h2>-->
+    <!-- <h2 class="SectionTitle">Explore</h2> -->
 
     <!-- ====================================================
-         Intro (full-bleed hero; open by default)
+         Intro (full-bleed hero; opens programmatically)
     ===================================================== -->
-<section class="Drawer Drawer--Open Drawer--FixedHero" id="Intro" data-drawer>
-  <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="true">Intro</h3>
+    <section class="Drawer Drawer--FixedHero" id="Intro" data-drawer>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Intro</h3>
 
-  <div<div class="DrawerContent DrawerContent--Fill" data-drawer-content>
-  <div class="VideoWrapper">
-    <video
-      class="VideoFixed"
-      src="../Assets/Movie_001.mp4"
-      autoplay
-      muted
-      playsinline
-      webkit-playsinline
-    </video>
+      <div class="DrawerContent DrawerContent--Fill" data-drawer-content>
+        <div class="VideoWrapper">
+          <video
+            class="VideoFixed"
+            src="../Assets/Movie_001.mp4"
+            autoplay
+            muted
+            playsinline
+            webkit-playsinline
+          ></video>
 
-    <button class="SkipButton SkipButton--Overlay"
-            onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
-      Skip Intro
-    </button>
-  </div>
-</div>
-</section>
+          <button class="SkipButton SkipButton--Overlay"
+                  onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+            Skip Intro
+          </button>
+        </div>
+      </div>
+    </section>
 
     <!-- ====================================================
          About
     ===================================================== -->
     <section class="Drawer" id="About" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">About Us</h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">About Us</h3>
       <div class="DrawerContent" data-drawer-content>
         <p>We machine complex parts with tight tolerances and consistent turnaround.</p>
         <p>ISO-style processes, modern CAM, and a quality-first culture.</p>
@@ -65,27 +65,27 @@
          Shop Tour (shorter hero)
     ===================================================== -->
     <section class="Drawer Drawer--FixedShort" id="Tour" data-drawer>
-  <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Shop Tour</h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Shop Tour</h3>
 
-<div class="DrawerContent DrawerContent--Fill" data-drawer-content>
-  <div class="VideoWrapper">
-    <video
-      class="VideoFixed"
-      src="../Assets/Movie_002.mp4"
-      preload="metadata"
-      playsinline
-      webkit-playsinline>
-    </video>
-    <!-- (Optional) add a skip here later if you want -->
-  </div>
-</div>
-</section>
+      <div class="DrawerContent DrawerContent--Fill" data-drawer-content>
+        <div class="VideoWrapper">
+          <video
+            class="VideoFixed"
+            src="../Assets/Movie_002.mp4"
+            preload="metadata"
+            playsinline
+            webkit-playsinline
+          ></video>
+          <!-- (Optional) add a skip here later if you want -->
+        </div>
+      </div>
+    </section>
 
     <!-- ====================================================
          Capabilities
     ===================================================== -->
     <section class="Drawer" id="Capabilities" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Capabilities</h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Capabilities</h3>
       <div class="DrawerContent" data-drawer-content>
         <ul>
           <li>3-axis &amp; 5-axis milling, CNC turning</li>
@@ -100,7 +100,7 @@
          Contact
     ===================================================== -->
     <section class="Drawer" id="Contact" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button" aria-expanded="false">Contact</h3>
+      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Contact</h3>
       <div class="DrawerContent" data-drawer-content>
         <p>Email: <a href="mailto:info@example.com">info@example.com</a></p>
         <p>Phone: 555-0100</p>
@@ -120,46 +120,47 @@
   ======================================================= -->
   <script src="../Scripts/Utilities.js"></script>
   <script src="../Scripts/Drawers.js"></script>
-  
+
+  <!-- Debug probe (kept as provided) -->
   <script>
-(function(){
-  function probe() {
-    var intro = document.getElementById("Intro");
-    if (!intro) return;
+  (function(){
+    function probe() {
+      var intro = document.getElementById("Intro");
+      if (!intro) return;
 
-    var content = intro.querySelector("[data-drawer-content]");
-    var video   = intro.querySelector("video");
-    var button  = intro.querySelector(".SkipButton--Overlay");
+      var content = intro.querySelector("[data-drawer-content]");
+      var video   = intro.querySelector("video");
+      var button  = intro.querySelector(".SkipButton--Overlay");
 
-    var cr = content ? content.getBoundingClientRect() : null;
-    var vr = video   ? video.getBoundingClientRect()   : null;
-    var br = button  ? button.getBoundingClientRect()  : null;
+      var cr = content ? content.getBoundingClientRect() : null;
+      var vr = video   ? video.getBoundingClientRect()   : null;
+      var br = button  ? button.getBoundingClientRect()  : null;
 
-    var txt = [
-      "content bottom: " + (cr ? Math.round(cr.bottom) : "—"),
-      "video   bottom: " + (vr ? Math.round(vr.bottom) : "—"),
-      "button  bottom: " + (br ? Math.round(br.bottom) : "—"),
-      "content height: " + (cr ? Math.round(cr.height) : "—"),
-      "video   height: " + (vr ? Math.round(vr.height) : "—")
-    ].join("\n");
+      var txt = [
+        "content bottom: " + (cr ? Math.round(cr.bottom) : "—"),
+        "video   bottom: " + (vr ? Math.round(vr.bottom) : "—"),
+        "button  bottom: " + (br ? Math.round(br.bottom) : "—"),
+        "content height: " + (cr ? Math.round(cr.height) : "—"),
+        "video   height: " + (vr ? Math.round(vr.height) : "—")
+      ].join("\\n");
 
-    var box = document.getElementById("DebugProbe");
-    if (!box) {
-      box = document.createElement("div");
-      box.id = "DebugProbe";
-      document.body.appendChild(box);
+      var box = document.getElementById("DebugProbe");
+      if (!box) {
+        box = document.createElement("div");
+        box.id = "DebugProbe";
+        document.body.appendChild(box);
+      }
+      box.textContent = txt;
     }
-    box.textContent = txt;
-  }
 
-  ["load","resize","orientationchange","scroll"].forEach(function(ev){
-    window.addEventListener(ev, probe, {passive:true});
-  });
-  document.addEventListener("loadedmetadata", probe, true);
-  document.addEventListener("transitionend", probe, true);
-  setInterval(probe, 400); // keep it fresh while testing
-})();
-</script>
+    ["load","resize","orientationchange","scroll"].forEach(function(ev){
+      window.addEventListener(ev, probe, {passive:true});
+    });
+    document.addEventListener("loadedmetadata", probe, true);
+    document.addEventListener("transitionend", probe, true);
+    setInterval(probe, 400); // keep it fresh while testing
+  })();
+  </script>
 
 </body>
 </html>
