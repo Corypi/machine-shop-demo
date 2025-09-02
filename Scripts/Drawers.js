@@ -88,14 +88,33 @@
   // Instantly remove a drawer from layout (no animation)
   DrawerController.prototype._forceRemoveFromFlow = function(drawer){
     if (!drawer) return;
+
+    // pause any media
+    try {
+      var vids = drawer.querySelectorAll("video");
+      for (var i = 0; i < vids.length; i++) { vids[i].pause(); }
+    } catch(_) {}
+
     // clear any height/transition crud
     var content = drawer.querySelector("[data-drawer-content]");
     if (content){
       content.style.transition = "";
       content.style.height = "";
     }
+
+    // ensure ARIA reflects closed
+    this.SetAriaExpanded(drawer, false);
+
     drawer.classList.remove("Drawer--Open", "Drawer--NoTail");
-    drawer.style.display = "none";
+
+    // robust hide (covers most CSS)
+    drawer.setAttribute("hidden", "");
+    drawer.style.display = "none"; // belt + suspenders
+
+    // force a reflow so layout updates before we snap
+    void document.body.offsetHeight;
+
+    // let listeners know the hero is collapsed
     document.dispatchEvent(new CustomEvent("drawer:collapsed", { detail: { id: drawer.id }}));
   };
 
@@ -109,6 +128,7 @@
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       d.classList.remove("Drawer--Open", "Drawer--NoTail");
+      d.removeAttribute("hidden");
       d.style.display = "";
       var c = d.querySelector("[data-drawer-content]");
       if (c) c.style.height = "";
@@ -305,6 +325,7 @@
       if (removeHero && heroId && d.id === heroId && d.style.display !== "none") {
         this._forceRemoveFromFlow(d); // ← instant removal, no pause
       } else {
+        d.removeAttribute("hidden");
         d.style.display = ""; // keep others visible in flow
       }
     }
@@ -493,6 +514,7 @@
       }
     }
 
+    drawer.removeAttribute("hidden");
     drawer.style.display = "";
     if (!drawer.classList.contains("Drawer--Open")) {
       this.OpenDrawer(drawer);
@@ -502,7 +524,7 @@
         if (this._isAnimating) {
           this._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
         } else {
-          this.CloseSiblings(drawer, /*removeHero*/true);
+          self2.CloseSiblings(drawer, /*removeHero*/true);
         }
       }
     }
