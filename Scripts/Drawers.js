@@ -27,7 +27,7 @@
       while (this._queue.length) {
         var fn = this._queue.shift();
         try { fn(); } catch (e) {}
-        if (this._isAnimating) break; // stop if the action kicked a new animation
+        if (this._isAnimating) break;
       }
     };
 
@@ -70,21 +70,6 @@
     window.scrollTo({ top: y, behavior: "auto" });
   };
 
-  // Retry snapping until TabBar has a real height (first-time open)
-  DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
-    var self = this, tries = 0, maxTries = 24;
-    function ready(){
-      var bar = self._tabBarEl();
-      var h = bar ? bar.getBoundingClientRect().height : 0;
-      return h > 1 && document.body.classList.contains("Tabs--Visible");
-    }
-    (function loop(){
-      if (ready()){ self._snapUnderTabs(drawer); return; }
-      if (++tries >= maxTries){ self._snapUnderTabs(drawer); return; }
-      requestAnimationFrame(loop);
-    })();
-  };
-
   // Instantly remove a drawer from layout (no animation)
   DrawerController.prototype._forceRemoveFromFlow = function(drawer){
     if (!drawer) return;
@@ -106,16 +91,14 @@
     this.SetAriaExpanded(drawer, false);
 
     drawer.classList.remove("Drawer--Open", "Drawer--NoTail");
-
-    // robust hide (covers most CSS)
     drawer.setAttribute("hidden", "");
-    drawer.style.display = "none"; // belt + suspenders
+    drawer.style.display = "none";
 
     // force a reflow so layout updates before we snap
     void document.body.offsetHeight;
 
-    // let listeners know the hero is collapsed
-    document.dispatchEvent(new CustomEvent("drawer:collapsed", { detail: { id: drawer.id }}));
+    // 🔔 tell everyone the hero is gone
+    document.dispatchEvent(new CustomEvent("hero:collapsed", { detail: { id: drawer.id }}));
   };
 
   // ===================================================
@@ -173,30 +156,30 @@
       this.CloseAndLock(drawer);
     } else {
       drawer.style.display = ""; // ensure visible
-      var self2 = this;
 
-      // If opening something that is NOT the hero, instantly remove hero from flow
+      // If opening something that is NOT the hero, instantly remove hero from flow and show tabs first
       if (heroId && drawer.id !== heroId) {
         var hero = document.getElementById(heroId);
         if (hero && hero.style.display !== "none") {
           this._forceRemoveFromFlow(hero);
-          this._ensureTabBarVisible();
-        } else {
-          this._ensureTabBarVisible();
         }
+        this._ensureTabBarVisible();
       }
 
-      self2.OpenDrawer(drawer);
+      this.OpenDrawer(drawer);
 
       if (OnlyOneOpenAtATime) {
-        if (self2._isAnimating) {
-          self2._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
+        if (this._isAnimating) {
+          var self2 = this;
+          this._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
         } else {
-          self2.CloseSiblings(drawer, /*removeHero*/true);
+          this.CloseSiblings(drawer, /*removeHero*/true);
         }
       }
 
-      self2._snapUnderTabsDeferred(drawer);
+      // snap after the open settles on next frame
+      var self3 = this;
+      requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
     }
   };
 
@@ -245,18 +228,15 @@
       return Math.max(0, Math.round(end));
     }
 
-    // Run after layout applies the open class
     requestAnimationFrame(function () {
       var endHeight = measureEndHeight();
 
-      // Fast-path: if there's nothing to animate, finish immediately (prevents lock)
       if (Math.abs(endHeight - startHeight) < 0.5) {
         content.style.transition = "";
-        // keep clamp-driven drawers on CSS height; others can be auto
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
-          content.style.height = "";   // let CSS clamp win
+          content.style.height = "";
         } else {
           content.style.height = "auto";
         }
@@ -268,7 +248,6 @@
       self.AnimateHeight(content, startHeight, endHeight);
     });
 
-    // Keep open panels healthy if media sizes even later
     this._wireMediaAutoGrow(content);
   };
 
@@ -282,17 +261,14 @@
     drawer.classList.remove("Drawer--NoTail");
     this.SetAriaExpanded(drawer, false);
 
-    // 🔔 notify tab bar
     document.dispatchEvent(new CustomEvent("drawer:closed", { detail: { id: drawer.id }}));
 
-    // Pause/rewind any videos in this drawer
     var vids = drawer.querySelectorAll("video");
     for (var i = 0; i < vids.length; i++) {
       try { vids[i].pause(); vids[i].currentTime = 0; } catch (e) {}
     }
 
     var endHeight = 0;
-    // If nothing to animate, finish immediately
     if (Math.abs(endHeight - startHeight) < 0.5) {
       content.style.transition = "";
       content.style.height = "";
@@ -309,9 +285,6 @@
     drawer.dataset.lockedUntil = String(this._now() + SuppressMsAfterProgrammaticClose);
   };
 
-  /**
-   * Close siblings; if removeHero=true, the hero (Intro) is instantly removed from flow.
-   */
   DrawerController.prototype.CloseSiblings = function (exceptDrawer, removeHero) {
     var heroId = this._heroId();
     for (var i = 0; i < this._drawers.length; i++) {
@@ -323,10 +296,10 @@
       }
 
       if (removeHero && heroId && d.id === heroId && d.style.display !== "none") {
-        this._forceRemoveFromFlow(d); // ← instant removal, no pause
+        this._forceRemoveFromFlow(d);
       } else {
         d.removeAttribute("hidden");
-        d.style.display = ""; // keep others visible in flow
+        d.style.display = "";
       }
     }
   };
@@ -337,7 +310,6 @@
     var self = this;
 
     if (this._isAnimating) {
-      // snap any in-flight to end state to avoid lock
       element.style.transition = "";
       element.style.height = endHeight > 0 ? (endHeight + "px") : "";
     }
@@ -356,8 +328,6 @@
 
       element.style.transition = "";
 
-      // For fixed-video drawers, clear inline height so CSS clamp applies.
-      // For regular content, 'auto' is fine.
       var drawer = element.closest && element.closest(".Drawer");
       var useCssClamp = drawer &&
                         (drawer.classList.contains("Drawer--FixedHero") ||
@@ -372,7 +342,6 @@
 
       self._isAnimating = false;
 
-      // drain queued actions
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           self._drainQueue();
@@ -410,14 +379,12 @@
           drawer.classList.remove("Drawer--NoTail");
         }
 
-        // Match AnimateHeight behavior:
-        // fixed-video drawers rely on CSS clamp; others can use 'auto'
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
-          content.style.height = "";      // let CSS rule control height
+          content.style.height = "";
         } else {
-          content.style.height = "auto";  // normal content
+          content.style.height = "auto";
         }
 
       } else {
@@ -503,15 +470,12 @@
     if (!drawer) return;
 
     var heroId = this._heroId();
-    // If opening a non-hero, instantly remove hero from flow
     if (heroId && id !== heroId) {
       var hero = document.getElementById(heroId);
       if (hero && hero.style.display !== "none") {
         this._forceRemoveFromFlow(hero);
-        this._ensureTabBarVisible();
-      } else {
-        this._ensureTabBarVisible();
       }
+      this._ensureTabBarVisible();
     }
 
     drawer.removeAttribute("hidden");
@@ -524,12 +488,13 @@
         if (this._isAnimating) {
           this._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
         } else {
-          self2.CloseSiblings(drawer, /*removeHero*/true);
+          this.CloseSiblings(drawer, /*removeHero*/true);
         }
       }
     }
 
-    this._snapUnderTabsDeferred(drawer);
+    var self3 = this;
+    requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
   };
 
   DrawerController.prototype.CloseById = function (id) {
@@ -547,28 +512,38 @@
   };
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
-    // If closing the hero, remove it from flow *immediately* — no waiting
     var heroId = this._heroId();
+
     if (closeId && heroId && closeId === heroId) {
+      // 1) Hide hero + show tabs this tick
       var hero = document.getElementById(closeId);
       if (hero && hero.style.display !== "none") {
         this._forceRemoveFromFlow(hero);
-        this._ensureTabBarVisible();
-      } else {
-        this._ensureTabBarVisible();
       }
-      this.OpenById(openId);
-      var target = document.getElementById(openId);
-      this._snapUnderTabsDeferred(target);
-      requestAnimationFrame(this._snapUnderTabsDeferred.bind(this, target));
+      this._ensureTabBarVisible();
+
+      // 2) Next frame: open target
+      var self = this;
+      requestAnimationFrame(function(){
+        self.OpenById(openId);
+
+        // 3) Next frame: snap under bar (after open/layout settles)
+        requestAnimationFrame(function(){
+          var target = document.getElementById(openId);
+          self._snapUnderTabs(target);
+        });
+      });
       return;
     }
 
-    // Otherwise close then open (non-hero path)
+    // Non-hero path
     if (closeId) this.CloseById(closeId);
     this.OpenById(openId);
-    var t2 = document.getElementById(openId);
-    this._snapUnderTabsDeferred(t2);
+    var self2 = this;
+    requestAnimationFrame(function(){
+      var t2 = document.getElementById(openId);
+      self2._snapUnderTabs(t2);
+    });
   };
 
   // ---------- Boot ----------
@@ -577,14 +552,11 @@
     var instance = new DrawerController(document);
     window.DrawersController = instance;
 
-    // Open Intro once layout settles (optional)
     function openIntro() {
       var intro = document.getElementById("Intro");
       if (!intro) return;
 
-      // Optional: auto-advance example Intro -> About
       instance._wireAutoAdvanceVideo("Intro", "About");
-
       instance.OpenById("Intro");
 
       var vid = intro.querySelector("video");
