@@ -41,31 +41,43 @@
   // --- utilities for snapping under the TabBar ---
   DrawerController.prototype._tabBarHeight = function(){
     var el = document.getElementById("TabBar");
-    // fall back to 56 if missing / not laid out yet
     var h = el ? el.getBoundingClientRect().height : 56;
     return (h && h > 0) ? h : 56;
   };
 
+  // Snap immediately (best-effort)
   DrawerController.prototype._snapActiveUnderTabs = function(drawer){
     if (!drawer) return;
     var title = drawer.querySelector("[data-drawer-summary]") || drawer;
     var y = title.getBoundingClientRect().top + window.pageYOffset - this._tabBarHeight();
-    // hard snap so we don't keep momentum and accidentally trigger other stuff
     window.scrollTo({ top: y, behavior: "auto" });
-    // double-Raf is overkill here since we’re not animating the page; keep it simple
   };
 
-  // Keep only one drawer visible in the document flow (others display:none)
-  DrawerController.prototype.ShowOnly = function(id){
-    for (var i = 0; i < this._drawers.length; i++){
-      var d = this._drawers[i];
-      if (!d) continue;
-      if (d.id === id){
-        d.style.display = ""; // visible
-      } else {
-        d.style.display = "none"; // fully out of flow
-      }
+  // Snap, but defer until the TabBar has become visible / has height
+  DrawerController.prototype._snapActiveUnderTabsDeferred = function(drawer){
+    var self = this;
+    var tries = 0;
+    function again(){
+      tries++;
+      // Wait a frame for TabBar visibility toggle
+      requestAnimationFrame(function(){
+        // If TabBar still 0-height on first frame (common), try a second one
+        var h = self._tabBarHeight();
+        if (h <= 1 && tries < 3){
+          again();
+          return;
+        }
+        self._snapActiveUnderTabs(drawer);
+      });
     }
+    again();
+  };
+
+  // Identify the hero/intro drawer (first in DOM with data-drawer)
+  DrawerController.prototype._heroId = function(){
+    if (!this._drawers || !this._drawers.length) return null;
+    var d = this._drawers[0];
+    return d && d.id ? d.id : null;
   };
 
   DrawerController.prototype.Initialize = function () {
@@ -76,7 +88,7 @@
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       d.classList.remove("Drawer--Open", "Drawer--NoTail");
-      d.style.display = ""; // ensure initially visible; ShowOnly() will hide non-active later
+      d.style.display = ""; // keep all visible in flow (except we may later hide hero after leaving it)
       var c = d.querySelector("[data-drawer-content]");
       if (c) c.style.height = "";
     }
@@ -118,27 +130,23 @@
     if (drawer.classList.contains("Drawer--Open")) {
       this.CloseAndLock(drawer);
     } else {
-      // ensure visible before opening (in case it was previously hidden by ShowOnly)
-      drawer.style.display = "";
+      drawer.style.display = ""; // ensure visible (in case it was previously hidden, e.g., hero after leave)
 
       this.OpenDrawer(drawer);
 
       if (OnlyOneOpenAtATime) {
         var self2 = this;
-        // Queue sibling closes if an animation will run
         if (this._isAnimating) {
           this._enqueue(function(){
-            self2.CloseSiblings(drawer, /*hide*/true);
+            self2.CloseSiblings(drawer, /*hideHeroOnly*/true);
           });
         } else {
-          this.CloseSiblings(drawer, /*hide*/true);
+          this.CloseSiblings(drawer, /*hideHeroOnly*/true);
         }
       }
 
-      // Snap the newly opened one under the TabBar
-      this._snapActiveUnderTabs(drawer);
-      // Also enforce ShowOnly so prior one disappears from the flow
-      this.ShowOnly(drawer.id);
+      // Defer snapping to allow TabBar to appear (height becomes non-zero)
+      this._snapActiveUnderTabsDeferred(drawer);
     }
   };
 
@@ -252,15 +260,26 @@
     drawer.dataset.lockedUntil = String(this._now() + SuppressMsAfterProgrammaticClose);
   };
 
-  // When hide=true, siblings will be display:none after close
-  DrawerController.prototype.CloseSiblings = function (exceptDrawer, hide) {
+  /**
+   * Close siblings. If hideHeroOnly=true, only the hero (first drawer) is display:none
+   * when it's not the active one; other drawers remain visible (collapsed).
+   */
+  DrawerController.prototype.CloseSiblings = function (exceptDrawer, hideHeroOnly) {
+    var heroId = this._heroId();
     for (var i = 0; i < this._drawers.length; i++) {
       var d = this._drawers[i];
-      if (d !== exceptDrawer && d.classList.contains("Drawer--Open")) {
+      if (d === exceptDrawer) continue;
+
+      if (d.classList.contains("Drawer--Open")) {
         this.CloseDrawer(d);
       }
-      if (hide && d !== exceptDrawer) {
+
+      if (hideHeroOnly && d.id === heroId) {
+        // Hide hero once we’ve left it
         d.style.display = "none";
+      } else if (hideHeroOnly) {
+        // Keep all other drawers in the document flow (visible but collapsed)
+        d.style.display = "";
       }
     }
   };
@@ -437,7 +456,7 @@
     var drawer = document.getElementById(id);
     if (!drawer) return;
 
-    // make sure it's visible if previously hidden
+    // make sure it's visible (e.g., hero could have been hidden)
     drawer.style.display = "";
 
     if (!drawer.classList.contains("Drawer--Open")) {
@@ -446,24 +465,27 @@
       if (OnlyOneOpenAtATime) {
         var self2 = this;
         if (this._isAnimating) {
-          this._enqueue(function(){ self2.CloseSiblings(drawer, /*hide*/true); });
+          this._enqueue(function(){ self2.CloseSiblings(drawer, /*hideHeroOnly*/true); });
         } else {
-          this.CloseSiblings(drawer, /*hide*/true);
+          this.CloseSiblings(drawer, /*hideHeroOnly*/true);
         }
       }
     }
 
-    // Keep only this one visible
-    this.ShowOnly(id);
-    // Snap it under the tabs
-    this._snapActiveUnderTabs(drawer);
+    // Defer snapping to let TabBar appear first
+    this._snapActiveUnderTabsDeferred(drawer);
   };
 
   DrawerController.prototype.CloseById = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
     if (drawer.classList.contains("Drawer--Open")) this.CloseAndLock(drawer);
-    // After a close-by-id we still keep it visible; ShowOnly/open routines decide display
+
+    // If we closed the hero, hide it from flow
+    var heroId = this._heroId();
+    if (drawer.id === heroId) {
+      drawer.style.display = "none";
+    }
   };
 
   DrawerController.prototype.ScrollToDrawer = function (id) {
@@ -476,8 +498,7 @@
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     if (closeId) this.CloseById(closeId);
-    this.OpenById(openId);              // handles ShowOnly + snap
-    // ScrollToDrawer redundant, OpenById already snaps under tabs
+    this.OpenById(openId);              // handles defer-snap + hero-hiding of siblings if needed
   };
 
   // ---------- Boot ----------
