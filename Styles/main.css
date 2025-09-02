@@ -255,6 +255,61 @@ body {
   border-radius: 0 0 var(--DrawerBottomCornerBorderRadiusPixels) var(--DrawerBottomCornerBorderRadiusPixels);
 }
 
+/* ===== Tab Bar ===== */
+.TabBar{
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 56px;
+  z-index: 9998;
+  backdrop-filter: blur(6px);
+  background: linear-gradient(180deg, rgba(13,16,20,0.72), rgba(13,16,20,0.45));
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.TabBarTrack{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0; /* allow flex children to shrink */
+}
+
+.Tab{
+  flex: 0 0 auto; /* compact chips by default */
+  max-width: 28%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #e9edf1;
+  background: rgba(255,255,255,0.04);
+  font: 600 14px/1 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: flex 220ms ease, background 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.Tab:hover{
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+}
+
+.Tab--Active{
+  flex: 1 1 auto;     /* <-- active tab expands to fill remaining width */
+  max-width: none;
+  background: rgba(72,176,255,0.16);
+  border-color: rgba(72,176,255,0.35);
+}
+
+.Tab--Past{           /* tabs for sections you scrolled past */
+  opacity: 0.85;
+}
+
+
 /*==========================================================
   Fixed-height Video (applies only while open)
 ==========================================================*/
