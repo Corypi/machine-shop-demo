@@ -580,20 +580,29 @@
             // Distance detent: require fresh user input
             if (this._accumulatedInput < this._threshold()) continue;
 
+            // 🔒 stop chain reactions while we animate/snap
+            this._isAnimating = true;
+
             this.OpenDrawer(drawer);
             this.ResetAccumulatedInput();
-            this.FreezeInput(500);
+            this.FreezeInput(600);
+
+            // Snap the page so this drawer header sits just under the TabBar
+            var snapY = drawer.getBoundingClientRect().top + window.pageYOffset - 56; // TabBar height
+            window.scrollTo({ top: snapY, behavior: "auto" });
 
             if (OnlyOneOpenAtATime) {
-              var selfSib = this;
-              if (this._isAnimating) {
-                this._enqueue(function(){ selfSib.CloseSiblings(drawer); });
-              } else {
-                this.CloseSiblings(drawer);
-              }
+              this.CloseSiblings(drawer);
             }
+
             // brief suppression so the open-induced layout shift doesn't chain-trigger
-            this._suppressIOUntil = this._now() + 150;
+            this._suppressIOUntil = this._now() + 300;
+
+            // release the animate lock shortly after the CSS transition
+            var self = this;
+            setTimeout(function(){ self._isAnimating = false; }, AnimationDurationMs + 60);
+
+            break; // ✅ handle only one drawer per observer batch
           }
         }
       } else if (this._scrollDirection === -1) {
@@ -603,19 +612,27 @@
 
             if (this._accumulatedInput < this._threshold()) continue;
 
+            // 🔒 stop chain reactions while we animate/snap
+            this._isAnimating = true;
+
             this.OpenDrawer(drawer);
             this.ResetAccumulatedInput();
-            this.FreezeInput(500);
+            this.FreezeInput(600);
+
+            // Snap to keep this drawer header under the TabBar
+            var snapYUp = drawer.getBoundingClientRect().top + window.pageYOffset - 56;
+            window.scrollTo({ top: snapYUp, behavior: "auto" });
 
             if (OnlyOneOpenAtATime) {
-              var selfSib2 = this;
-              if (this._isAnimating) {
-                this._enqueue(function(){ selfSib2.CloseSiblings(drawer); });
-              } else {
-                this.CloseSiblings(drawer);
-              }
+              this.CloseSiblings(drawer);
             }
-            this._suppressIOUntil = this._now() + 150;
+
+            this._suppressIOUntil = this._now() + 300;
+
+            var self2 = this;
+            setTimeout(function(){ self2._isAnimating = false; }, AnimationDurationMs + 60);
+
+            break; // ✅ handle only one drawer per observer batch
           }
         }
       }
