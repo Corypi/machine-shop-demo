@@ -163,6 +163,85 @@
     setInterval(probe, 400); // keep it fresh while testing
   })();
   </script>
+  
+  <script>
+(function(){
+  // Creates/updates a right-side scroll probe reading from window.DrawersController
+  var box, lastY = window.pageYOffset || 0, lastT = performance.now();
+
+  function ensureBox(){
+    if (!box){
+      box = document.createElement("div");
+      box.id = "ScrollProbe";
+      document.body.appendChild(box);
+    }
+  }
+
+  function formatMs(ms){
+    return (ms > 0) ? Math.round(ms) + "ms" : "0ms";
+  }
+
+  function tick(){
+    ensureBox();
+
+    var now  = performance.now();
+    var y    = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var dt   = Math.max(1, now - lastT);
+    var dy   = y - lastY;
+    var v    = (dy / dt * 1000).toFixed(1); // px/s
+
+    var dc   = window.DrawersController || null;
+
+    // Pull internals if present (all safe reads)
+    var acc  = dc && typeof dc._accumulatedInput === "number" ? Math.round(dc._accumulatedInput) : "—";
+    var fzn  = dc && typeof dc._isFrozen === "function" ? dc._isFrozen() : false;
+    var blck = dc && typeof dc._blockScroll === "boolean" ? dc._blockScroll : false;
+    var anim = dc && typeof dc._isAnimating === "boolean" ? dc._isAnimating : false;
+    var dir  = dc && typeof dc._scrollDirection === "number" ? (dc._scrollDirection > 0 ? "down" : (dc._scrollDirection < 0 ? "up" : "—")) : "—";
+    var last = dc && typeof dc._lastScrollY === "number" ? Math.round(dc._lastScrollY) : "—";
+    var sup  = dc && typeof dc._suppressIOUntil === "number" ? Math.max(0, Math.round(dc._suppressIOUntil - (performance.now()))) : 0;
+    var frz  = dc && typeof dc._freezeUntil === "number" ? Math.max(0, Math.round(dc._freezeUntil - (performance.now()))) : 0;
+
+    // Anchor info
+    var vh    = window.innerHeight || document.documentElement.clientHeight || 0;
+    var frac  = 0.35; // keep in sync with Drawers.js ViewportAnchorFraction
+    var off   = 28;   // keep in sync with OpenOffsetPx
+    var anchorY = Math.round(vh * frac + off);
+
+    // Threshold if available
+    var thr = (dc && typeof dc._threshold === "function") ? Math.round(dc._threshold()) : "—";
+
+    var lines = [
+      "=== Scroll Probe ===",
+      "y: " + Math.round(y) + "px",
+      "dy: " + Math.round(dy) + "px  (" + v + " px/s)",
+      "",
+      "accumulatedInput: " + acc + (thr !== "—" ? " / thr " + thr : ""),
+      "direction: " + dir,
+      "lastScrollY: " + last,
+      "isAnimating: " + anim,
+      "freeze(ms left): " + formatMs(frz),
+      "suppressIO(ms): " + formatMs(sup),
+      "blockScroll: " + blck,
+      "",
+      "anchorY (vh*0.35 + 28): " + anchorY + "px"
+    ];
+
+    box.textContent = lines.join("\n");
+
+    lastY = y;
+    lastT = now;
+    requestAnimationFrame(tick);
+  }
+
+  // start after load so DrawersController exists
+  if (document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){ requestAnimationFrame(tick); });
+  } else {
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
 
 </body>
 </html>
