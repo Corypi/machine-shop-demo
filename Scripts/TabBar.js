@@ -120,22 +120,47 @@
   };
 
   TabBarController.prototype._applyVisibility = function(activeId){
-    var shouldShow = !!activeId && activeId !== this._heroId;
-    document.body.classList.toggle("Tabs--Visible", shouldShow);
-    if (this._elBar){
-      this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
-    }
+  var shouldShow = !!activeId && activeId !== this._heroId;
 
-    // On first leave from hero, collapse it and allow its tab
-    if (activeId && activeId !== this._heroId && !this._heroCollapsed){
-      var hero = document.getElementById(this._heroId);
-      if (hero){
-        hero.style.display = "none";
-        this._heroCollapsed = true;
-        this._renderTabsVisibility();
+  // toggle body class for styling
+  document.body.classList.toggle("Tabs--Visible", shouldShow);
+
+  // toggle aria-hidden on bar
+  if (this._elBar){
+    this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+  }
+
+  // On first leave from hero, collapse it and snap the active drawer under the bar
+  if (activeId && activeId !== this._heroId && !this._heroCollapsed){
+    var hero = document.getElementById(this._heroId);
+    if (hero){
+      hero.style.display = "none";
+      this._heroCollapsed = true;
+
+      // ----- SNAP SCROLL UNDER TAB BAR + MOMENTUM GUARD -----
+      var active = document.getElementById(activeId);
+      if (active){
+        var title = active.querySelector("[data-drawer-summary]") || active;
+        var tabBarH = 56; // keep in sync with CSS
+        var targetY = title.getBoundingClientRect().top + window.pageYOffset - tabBarH;
+
+        // Cancel momentum & settle the page exactly under the bar
+        window.scrollTo({ top: targetY, behavior: "auto" });
+        requestAnimationFrame(function(){
+          window.scrollTo({ top: targetY, behavior: "auto" });
+        });
       }
+
+      // Tell Drawers controller to ignore IO briefly so other drawers don't trigger
+      if (window.DrawersController && typeof window.DrawersController._now === "function"){
+        window.DrawersController._suppressIOUntil =
+          window.DrawersController._now() + 400; // small debounce window
+      }
+
+      this._renderTabsVisibility(); // let Intro tab appear now that hero collapsed
     }
-  };
+  }
+};
 
   // 🔑 Only show tabs up to (and including) the active index.
   TabBarController.prototype._renderTabsVisibility = function(){
