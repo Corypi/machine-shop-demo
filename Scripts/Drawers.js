@@ -168,6 +168,9 @@
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
+    // 🔔 notify tab bar
+    document.dispatchEvent(new CustomEvent("drawer:opened", { detail: { id: drawer.id }}));
+
     var self = this;
 
     // Measure end height with inline height cleared so CSS (dvh clamp) can apply
@@ -226,6 +229,9 @@
     drawer.classList.remove("Drawer--Open");
     drawer.classList.remove("Drawer--NoTail");
     this.SetAriaExpanded(drawer, false);
+
+    // 🔔 notify tab bar
+    document.dispatchEvent(new CustomEvent("drawer:closed", { detail: { id: drawer.id }}));
 
     // Pause/rewind any videos in this drawer
     var vids = drawer.querySelectorAll("video");
