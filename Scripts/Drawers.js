@@ -65,14 +65,26 @@
     this._accumulatedInput = 0;  // how much user scroll has happened since last reset
     this._touchStartY = null;
 
+    // Detent thresholds (feel free to tweak)
+    this._stepDesktopPx = 160;   // wheel/trackpad step required
+    this._stepTouchPx   = 100;   // touch/drag step required
+
+    this._isTouchLike = function(){
+      return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    };
+    this._threshold = function(){
+      return this._isTouchLike() ? this._stepTouchPx : this._stepDesktopPx;
+    };
+
     this.FreezeInput = function(ms){
       var now = this._now();
-      this._freezeUntil = now + (ms || 400);
+      var dur = ms || 500;
+      this._freezeUntil = now + dur;
       this._blockScroll = true;
       this._accumulatedInput = 0;
       var self = this;
-      // release hard block a bit earlier; IO observer will still be gated by _freezeUntil
-      setTimeout(function(){ self._blockScroll = false; }, Math.min(ms || 400, 300));
+      // release hard block a bit earlier; IO observer still gated by _freezeUntil
+      setTimeout(function(){ self._blockScroll = false; }, Math.min(dur, 350));
     };
 
     this.ResetAccumulatedInput = function(){
@@ -476,6 +488,7 @@
       if (summary) this._observer.observe(summary);
       if (marker)  this._observer.observe(marker);
     }
+
     // Cancel momentum / block scroll while frozen; accumulate otherwise
     function onWheel(e){
       if (self._blockScroll || self._isFrozen()){
@@ -504,22 +517,25 @@
     }
 
     function onKeyDown(e){
+      var k = e.key || "";
+      var isScrollKey = (k === "PageDown" || k === "PageUp" || k === "Home" || k === "End" ||
+                         k === " " || k === "ArrowDown" || k === "ArrowUp");
+      if (!isScrollKey) return;
+
       if (self._blockScroll || self._isFrozen()){
-        var k = e.key || "";
-        // block keys that scroll
-        if (k === "PageDown" || k === "PageUp" || k === "Home" || k === "End" ||
-            k === " " || k === "ArrowDown" || k === "ArrowUp"){
-          try { e.preventDefault(); } catch(_) {}
-          return;
-        }
+        try { e.preventDefault(); } catch(_) {}
+        return;
       }
+      // Count each scroll key press as one threshold step
+      self._accumulatedInput += self._threshold();
     }
 
     // IMPORTANT: non-passive to allow preventDefault
-    window.addEventListener("wheel", onWheel, { passive: false });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-    window.addEventListener("keydown", onKeyDown, { passive: false });
+    window.addEventListener("wheel",      onWheel,      { passive: false });
+    window.addEventListener("touchstart", onTouchStart, { passive: true  });
+    window.addEventListener("touchmove",  onTouchMove,  { passive: false });
+    window.addEventListener("keydown",    onKeyDown,    { passive: false });
+
     function onScroll() {
       var y = window.pageYOffset || 0;
       self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : self._scrollDirection;
@@ -531,7 +547,7 @@
 
   DrawerController.prototype._OnIntersections = function (entries) {
     var now = this._now();
-        // If we're in a freeze window, ignore IO entirely
+    // If we're in a freeze window, ignore IO entirely
     if (this._isFrozen()) return;
     if (this._booting || now < this._suppressIOUntil) return;
 
@@ -560,7 +576,14 @@
         // DOWNWARD: open when the title crosses the anchor (below threshold)
         if (target.hasAttribute("data-drawer-summary")) {
           if (rectTop <= anchorY && !drawer.classList.contains("Drawer--Open")) {
+
+            // Distance detent: require fresh user input
+            if (this._accumulatedInput < this._threshold()) continue;
+
             this.OpenDrawer(drawer);
+            this.ResetAccumulatedInput();
+            this.FreezeInput(500);
+
             if (OnlyOneOpenAtATime) {
               var selfSib = this;
               if (this._isAnimating) {
@@ -577,7 +600,13 @@
         // UPWARD: open when the close-marker crosses the anchor from below
         if (target.hasAttribute("data-close-marker")) {
           if (rectTop >= anchorY && !drawer.classList.contains("Drawer--Open")) {
+
+            if (this._accumulatedInput < this._threshold()) continue;
+
             this.OpenDrawer(drawer);
+            this.ResetAccumulatedInput();
+            this.FreezeInput(500);
+
             if (OnlyOneOpenAtATime) {
               var selfSib2 = this;
               if (this._isAnimating) {
@@ -617,6 +646,9 @@
       this.OpenDrawer(drawer);
       // Suppress IO to avoid chain-opening via layout shift
       this._suppressIOUntil = this._now() + 450;
+      // Also freeze input briefly to absorb momentum
+      this.FreezeInput(450);
+
       if (OnlyOneOpenAtATime) {
         var self2 = this;
         if (this._isAnimating) {
