@@ -100,7 +100,7 @@
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       d.classList.remove("Drawer--Open", "Drawer--NoTail");
-      d.style.display = ""; // keep all visible in flow
+      d.style.display = ""; // keep all visible in flow (no display:none)
       var c = d.querySelector("[data-drawer-content]");
       if (c) c.style.height = "";
     }
@@ -208,7 +208,7 @@
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
-    // 🔔 notify tab bar (TabBar shows + updates selected tab)
+    // 🔔 notify tab bar
     document.dispatchEvent(new CustomEvent("drawer:opened", { detail: { id: drawer.id }}));
 
     var self = this;
@@ -297,8 +297,8 @@
   };
 
   /**
-   * Close siblings. If hideHeroOnly=true, only the hero (first drawer) is display:none
-   * when it's not the active one; other drawers remain visible (collapsed).
+   * Close siblings. If hideHeroOnly=true, we do NOT display:none the hero anymore.
+   * We keep it in the flow (collapsed) so probes/layout stay valid.
    */
   DrawerController.prototype.CloseSiblings = function (exceptDrawer, hideHeroOnly) {
     var heroId = this._heroId();
@@ -310,13 +310,8 @@
         this.CloseDrawer(d);
       }
 
-      if (hideHeroOnly && d.id === heroId) {
-        // Hero will be hidden by the caller when appropriate
-        continue;
-      } else if (hideHeroOnly) {
-        // Keep all other drawers in the document flow (visible but collapsed)
-        d.style.display = "";
-      }
+      // Keep all drawers visible in flow (no display:none), including hero.
+      d.style.display = "";
     }
   };
 
@@ -487,7 +482,7 @@
     var drawer = document.getElementById(id);
     if (!drawer) return;
 
-    // ensure visible (e.g., hero could have been hidden previously)
+    // ensure visible (no display:none)
     drawer.style.display = "";
 
     if (!drawer.classList.contains("Drawer--Open")) {
@@ -503,7 +498,14 @@
       }
     }
 
-    // Defer snapping to let TabBar appear first (first-time open)
+    // Make sure TabBar is visible for first non-hero open
+    var tabBar = this._tabBarEl();
+    if (tabBar && !document.body.classList.contains("Tabs--Visible")) {
+      document.body.classList.add("Tabs--Visible");
+      tabBar.setAttribute("aria-hidden","false");
+    }
+
+    // Defer snapping to let TabBar appear first
     this._snapActiveUnderTabsDeferred(drawer);
   };
 
@@ -524,38 +526,28 @@
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     var self = this;
 
-    // If we need to close first, do it and wait for the transition to end
     if (closeId) {
       var closeEl = document.getElementById(closeId);
-      var heroWasClosed = false;
 
       if (closeEl && closeEl.classList.contains("Drawer--Open")) {
         this.CloseById(closeId);
-        heroWasClosed = (closeId === this._heroId());
       }
 
-      // Wait for close animation, then hide hero (if that was the close target), then open.
+      // Wait for close animation, then open target.
       waitForHeightTransition(closeEl || document.body, AnimationDurationMs + 120).then(function(){
-        if (heroWasClosed && closeEl) {
-          // hide hero after its own transition completes
-          closeEl.style.display = "none";
-        }
-
         // Open the target
         self.OpenById(openId);
 
-        // --- FORCE TABBAR VISIBILITY + SNAP (first non-hero open) ---
-        var target = document.getElementById(openId);
+        // Ensure TabBar is visible for the very first non-hero open
         var tabBar = self._tabBarEl();
         if (tabBar && !document.body.classList.contains("Tabs--Visible")) {
           document.body.classList.add("Tabs--Visible");
           tabBar.setAttribute("aria-hidden","false");
         }
 
-        // Do a deferred snap once TabBar is measurable
+        // Defer snap (multiple rAFs for safety)
+        var target = document.getElementById(openId);
         self._snapActiveUnderTabsDeferred(target);
-
-        // And a tiny follow-up snap a couple rAFs later (belt & suspenders)
         requestAnimationFrame(function(){
           requestAnimationFrame(function(){
             self._snapActiveUnderTabsDeferred(target);
