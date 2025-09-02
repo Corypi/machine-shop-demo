@@ -59,6 +59,30 @@
       return (window.performance && performance.now) ? performance.now() : Date.now();
     };
 
+    // ----- Scroll Input Gate (freeze & accumulate) -----
+    this._freezeUntil = 0;       // time (ms) until we allow IO
+    this._blockScroll = false;   // actively prevent default scrolling
+    this._accumulatedInput = 0;  // how much user scroll has happened since last reset
+    this._touchStartY = null;
+
+    this.FreezeInput = function(ms){
+      var now = this._now();
+      this._freezeUntil = now + (ms || 400);
+      this._blockScroll = true;
+      this._accumulatedInput = 0;
+      var self = this;
+      // release hard block a bit earlier; IO observer will still be gated by _freezeUntil
+      setTimeout(function(){ self._blockScroll = false; }, Math.min(ms || 400, 300));
+    };
+
+    this.ResetAccumulatedInput = function(){
+      this._accumulatedInput = 0;
+    };
+
+    this._isFrozen = function(){
+      return this._now() < this._freezeUntil;
+    };
+
     this.Initialize();
   }
 
@@ -452,7 +476,50 @@
       if (summary) this._observer.observe(summary);
       if (marker)  this._observer.observe(marker);
     }
+    // Cancel momentum / block scroll while frozen; accumulate otherwise
+    function onWheel(e){
+      if (self._blockScroll || self._isFrozen()){
+        // need a non-passive listener to cancel momentum
+        try { e.preventDefault(); } catch(_) {}
+        return;
+      }
+      self._accumulatedInput += Math.abs(e.deltaY || 0);
+    }
 
+    function onTouchStart(e){
+      var t = e.touches && e.touches[0];
+      self._touchStartY = t ? t.clientY : null;
+    }
+
+    function onTouchMove(e){
+      if (self._blockScroll || self._isFrozen()){
+        try { e.preventDefault(); } catch(_) {}
+        return;
+      }
+      var t = e.touches && e.touches[0];
+      if (t && self._touchStartY != null){
+        self._accumulatedInput += Math.abs(t.clientY - self._touchStartY);
+        self._touchStartY = t.clientY;
+      }
+    }
+
+    function onKeyDown(e){
+      if (self._blockScroll || self._isFrozen()){
+        var k = e.key || "";
+        // block keys that scroll
+        if (k === "PageDown" || k === "PageUp" || k === "Home" || k === "End" ||
+            k === " " || k === "ArrowDown" || k === "ArrowUp"){
+          try { e.preventDefault(); } catch(_) {}
+          return;
+        }
+      }
+    }
+
+    // IMPORTANT: non-passive to allow preventDefault
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("keydown", onKeyDown, { passive: false });
     function onScroll() {
       var y = window.pageYOffset || 0;
       self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : self._scrollDirection;
@@ -464,6 +531,8 @@
 
   DrawerController.prototype._OnIntersections = function (entries) {
     var now = this._now();
+        // If we're in a freeze window, ignore IO entirely
+    if (this._isFrozen()) return;
     if (this._booting || now < this._suppressIOUntil) return;
 
     // HARD MUTEX: if we're animating, ignore IO entirely
