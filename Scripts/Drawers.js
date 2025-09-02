@@ -5,23 +5,8 @@
   var AnimationDurationMs = 220;
   var OnlyOneOpenAtATime = true;
 
-  // Auto open/close on scroll via a single “virtual line”
-  var AutoOpenOnScroll = true;
-  var ViewportAnchorFraction = 0.35; // 35% from the top
-  var OpenOffsetPx = 28;             // open slightly *below* that line
-
   // Anti-flap after programmatic close
   var SuppressMsAfterProgrammaticClose = 250;
-
-  // Suppress IO reactions briefly during boot/programmatic open
-  var SuppressIOAfterBootMs = 400;
-
-  // Percent slice around our line (geometry guard enforces offset)
-  function computeRootMargin() {
-    var topPct = -(ViewportAnchorFraction * 100);
-    var botPct = -(100 - ViewportAnchorFraction * 100);
-    return topPct.toFixed(3) + "% 0px " + botPct.toFixed(3) + "% 0px";
-  }
 
   // ============================================
 
@@ -31,15 +16,6 @@
 
     this._drawers = null;
     this._summaries = null;
-    this._observer = null;
-
-    // Direction tracking
-    this._lastScrollY = window.pageYOffset || 0;
-    this._scrollDirection = 1; // seed as "down"
-
-    // Boot/IO suppression
-    this._booting = true;
-    this._suppressIOUntil = 0;
 
     // ---- Single-flight queue (one animation at a time) ----
     this._queue = [];
@@ -57,39 +33,6 @@
 
     this._now = function () {
       return (window.performance && performance.now) ? performance.now() : Date.now();
-    };
-
-    // ----- Scroll Input Gate (freeze & accumulate) -----
-    this._freezeUntil = 0;       // time (ms) until we allow IO
-    this._blockScroll = false;   // actively prevent default scrolling
-    this._accumulatedInput = 0;  // ABSOLUTE distance tracker (legacy)
-    this._accumulatedSigned = 0; // NEW: signed distance tracker (+down, -up)
-    this._touchStartY = null;
-
-    this.FreezeInput = function(ms){
-      var now = this._now();
-      this._freezeUntil = now + (ms || 500);
-      this._blockScroll = true;
-      this._accumulatedInput = 0;
-      this._accumulatedSigned = 0;
-      var self = this;
-      // release hard block a bit earlier; IO still gated by _freezeUntil
-      setTimeout(function(){ self._blockScroll = false; }, Math.min(ms || 500, 400));
-    };
-
-    this.ResetAccumulatedInput = function(){
-      this._accumulatedInput = 0;
-      this._accumulatedSigned = 0;
-    };
-
-    this._isFrozen = function(){
-      return this._now() < this._freezeUntil;
-    };
-
-    // NEW: one place to keep our “detent” distance
-    this._threshold = function(){
-      // Tunable: how much user scroll input must be applied to step sections
-      return 320; // px of input (wheel/touch/key), adjust to taste
     };
 
     this.Initialize();
@@ -113,28 +56,8 @@
       this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
     }
 
-    // NEW: install close-markers so we can react when scrolling upward
-    this._InstallCloseMarkers();
-
     this.SyncAria();
     this.SyncHeights();
-
-    if (AutoOpenOnScroll) this.EnableScrollAutoToggle();
-  };
-
-  // Add a tiny sentinel at the end of each drawer content
-  DrawerController.prototype._InstallCloseMarkers = function () {
-    for (var i = 0; i < this._drawers.length; i++) {
-      var d = this._drawers[i];
-      var content = d.querySelector("[data-drawer-content]");
-      if (!content) continue;
-      if (!content.querySelector("[data-close-marker]")) {
-        var marker = document.createElement("div");
-        marker.setAttribute("data-close-marker", "");
-        marker.style.cssText = "position:relative;height:1px;width:1px;pointer-events:none;";
-        content.appendChild(marker);
-      }
-    }
   };
 
   // ---------- Interaction ----------
@@ -165,8 +88,6 @@
       this.CloseAndLock(drawer);
     } else {
       this.OpenDrawer(drawer);
-      // suppress IO briefly so the open-induced layout shift doesn't auto-open the next drawer
-      this._suppressIOUntil = this._now() + 450;
 
       if (OnlyOneOpenAtATime) {
         var self2 = this;
@@ -304,11 +225,6 @@
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
     var self = this;
 
-    // pin the 35% line (so the page doesn't "shoot")
-    var vh = window.innerHeight || document.documentElement.clientHeight;
-    var anchorDocYBefore = (window.pageYOffset || document.documentElement.scrollTop || 0)
-                         + vh * ViewportAnchorFraction + OpenOffsetPx;
-
     if (this._isAnimating) {
       // snap any in-flight to end state to avoid lock
       element.style.transition = "";
@@ -345,18 +261,10 @@
 
       self._isAnimating = false;
 
-      // restore the 35%+offset line after layout settles, then drain queued actions
+      // drain queued actions
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
-          var anchorDocYAfter =
-            (window.pageYOffset || document.documentElement.scrollTop || 0) +
-            (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction +
-            OpenOffsetPx;
-
-          var delta = anchorDocYAfter - anchorDocYBefore;
-          if (Math.abs(delta) > 0.5) window.scrollBy(0, -delta);
-
-          self._drainQueue(); // ✅ run whatever was queued
+          self._drainQueue();
         });
       });
     }
@@ -428,7 +336,7 @@
     }
   };
 
-  // --- Auto-advance video drawers (safe: only if playback truly started) ---
+  // --- Auto-advance video drawers (optional; remove if undesired) ---
   DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
     var drawer = document.getElementById(drawerId);
     if (!drawer) return;
@@ -455,8 +363,6 @@
       if (!started) return;
       if (!drawer.classList.contains("Drawer--Open")) return;
 
-      self._suppressIOUntil = self._now() + 600;
-
       if (nextId) {
         self.OpenThenCloseAndScroll(nextId, drawerId);
       } else {
@@ -465,252 +371,7 @@
     }, { passive:true });
   };
 
-  // ---------- Auto open on scroll (bidirectional) ----------
-  DrawerController.prototype.EnableScrollAutoToggle = function () {
-    var self = this;
-
-    // === Helpers ===
-    function recordDirection(dy){
-      if (dy > 0)      self._scrollDirection = 1;
-      else if (dy < 0) self._scrollDirection = -1;
-      // if dy === 0, leave as-is
-    }
-
-    function applyInput(dy){
-      if (!dy) return;
-      recordDirection(dy);
-      self._accumulatedInput  += Math.abs(dy);
-      self._accumulatedSigned += dy;
-    }
-
-    function currentIndex(){
-      // first open wins; if none open, logical “-1” so first step opens 0
-      for (var i = 0; i < self._drawers.length; i++){
-        if (self._drawers[i].classList.contains("Drawer--Open")) return i;
-      }
-      return -1;
-    }
-
-    function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
-
-    function openAtIndex(nextIndex){
-      nextIndex = clamp(nextIndex, 0, self._drawers.length - 1);
-      var d = self._drawers[nextIndex];
-      if (!d) return;
-
-      // step action: open the one drawer, close others, scroll it into position
-      self.OpenDrawer(d);
-      if (self._isAnimating){
-        self._enqueue(function(){ self.CloseSiblings(d); });
-      } else {
-        self.CloseSiblings(d);
-      }
-      self.ScrollToDrawer(d.id);
-
-      // gate further input for a tick so momentum doesn’t cascade
-      self.ResetAccumulatedInput();
-      self.FreezeInput(700);
-      self._suppressIOUntil = self._now() + 300;
-    }
-
-    function maybeStep(){
-      if (self._isFrozen() || self._isAnimating) return;
-
-      var thr = self._threshold();
-      var val = self._accumulatedSigned;
-
-      if (val >= thr){
-        // step DOWN
-        var idx = currentIndex();
-        openAtIndex(idx + 1);
-      } else if (val <= -thr){
-        // step UP
-        var idx2 = currentIndex();
-        // if nothing open yet (-1), stepping up means open first (0)
-        openAtIndex(idx2 < 0 ? 0 : idx2 - 1);
-      }
-    }
-
-    // === Input listeners (wheel/touch/key) ===
-    function onWheel(e){
-      var dy = e.deltaY || 0;
-
-      // Always record direction, even if frozen
-      recordDirection(dy);
-
-      if (self._blockScroll || self._isFrozen()){
-        try { e.preventDefault(); } catch(_) {}
-        return;
-      }
-
-      applyInput(dy);
-      maybeStep();
-    }
-
-    function onTouchStart(e){
-      var t = e.touches && e.touches[0];
-      self._touchStartY = t ? t.clientY : null;
-    }
-
-    function onTouchMove(e){
-      var t = e.touches && e.touches[0];
-      if (!t || self._touchStartY == null) return;
-
-      var dy = self._touchStartY - t.clientY; // down swipe => positive
-      // Always record direction
-      recordDirection(dy);
-
-      if (self._blockScroll || self._isFrozen()){
-        try { e.preventDefault(); } catch(_) {}
-        // still update anchor for next move
-        self._touchStartY = t.clientY;
-        return;
-      }
-
-      self._touchStartY = t.clientY;
-      applyInput(dy);
-      maybeStep();
-    }
-
-    function onTouchEnd(){
-      self._touchStartY = null;
-    }
-
-    function onKeyDown(e){
-      var k = e.key || "";
-      var step = 120; // emulate wheel delta for keys
-      var dy = 0;
-
-      if (k === "ArrowDown" || k === "PageDown" || k === " "){ dy =  step; }
-      if (k === "ArrowUp"   || k === "PageUp"){                 dy = -step; }
-      if (k === "Home"){                                         dy = -step * 2; }
-      if (k === "End"){                                          dy =  step * 2; }
-
-      if (!dy) return; // not a scroll key
-
-      // Always record direction
-      recordDirection(dy);
-
-      // We control the stepping; block native scroll
-      try { e.preventDefault(); } catch(_) {}
-
-      if (self._blockScroll || self._isFrozen()) return;
-
-      applyInput(dy);
-      maybeStep();
-    }
-
-    // IMPORTANT: wheel/touchmove must be non-passive to allow preventDefault
-    window.addEventListener("wheel", onWheel, { passive: false });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: false });
-    window.addEventListener("touchend", onTouchEnd, { passive: true });
-    window.addEventListener("keydown", onKeyDown, { passive: false });
-
-    // Still track direction (useful for TabBar highlight, etc.)
-    function onScroll(){
-      var y = window.pageYOffset || 0;
-      self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : self._scrollDirection;
-      self._lastScrollY = y;
-    }
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-  };
-
-  DrawerController.prototype._OnIntersections = function (entries) {
-    var now = this._now();
-    // If we're in a freeze window, ignore IO entirely
-    if (this._isFrozen()) return;
-    if (this._booting || now < this._suppressIOUntil) return;
-
-    // HARD MUTEX: if we're animating, ignore IO entirely
-    if (this._isAnimating) return;
-
-    // chronological
-    entries.sort(function (a, b) { return a.time - b.time; });
-
-    var anchorY = (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction + OpenOffsetPx;
-
-    for (var idx = 0; idx < entries.length; idx++) {
-      var entry = entries[idx];
-      if (!entry.isIntersecting) continue; // entering the slice only
-
-      var target = entry.target;
-      var drawer = target.closest && target.closest("[data-drawer]");
-      if (!drawer) continue;
-
-      var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
-      if (lockedUntil > now) continue;
-
-      var rectTop = target.getBoundingClientRect().top;
-
-      if (this._scrollDirection === 1) {
-        // DOWNWARD: open when the title crosses the anchor (below threshold)
-        if (target.hasAttribute("data-drawer-summary")) {
-          if (rectTop <= anchorY && !drawer.classList.contains("Drawer--Open")) {
-
-            // Distance detent (signed): require fresh user input in this direction
-            if (this._accumulatedSigned < this._threshold()) continue;
-
-            // 🔒 stop chain reactions while we animate/snap
-            this._isAnimating = true;
-
-            this.OpenDrawer(drawer);
-            this.ResetAccumulatedInput();
-            this.FreezeInput(600);
-
-            // Snap the page so this drawer header sits just under the TabBar
-            var snapY = drawer.getBoundingClientRect().top + window.pageYOffset - 56; // TabBar height
-            window.scrollTo({ top: snapY, behavior: "auto" });
-
-            if (OnlyOneOpenAtATime) {
-              this.CloseSiblings(drawer);
-            }
-
-            // brief suppression so the open-induced layout shift doesn't chain-trigger
-            this._suppressIOUntil = this._now() + 300;
-
-            // release the animate lock shortly after the CSS transition
-            var self = this;
-            setTimeout(function(){ self._isAnimating = false; }, AnimationDurationMs + 60);
-
-            break; // ✅ handle only one drawer per observer batch
-          }
-        }
-      } else if (this._scrollDirection === -1) {
-        // UPWARD: open when the close-marker crosses the anchor from below
-        if (target.hasAttribute("data-close-marker")) {
-          if (rectTop >= anchorY && !drawer.classList.contains("Drawer--Open")) {
-
-            // Distance detent (signed): require fresh user input in this direction
-            if (this._accumulatedSigned > -this._threshold()) continue;
-
-            // 🔒 stop chain reactions while we animate/snap
-            this._isAnimating = true;
-
-            this.OpenDrawer(drawer);
-            this.ResetAccumulatedInput();
-            this.FreezeInput(600);
-
-            // Snap to keep this drawer header under the TabBar
-            var snapYUp = drawer.getBoundingClientRect().top + window.pageYOffset - 56;
-            window.scrollTo({ top: snapYUp, behavior: "auto" });
-
-            if (OnlyOneOpenAtATime) {
-              this.CloseSiblings(drawer);
-            }
-
-            this._suppressIOUntil = this._now() + 300;
-
-            var self2 = this;
-            setTimeout(function(){ self2._isAnimating = false; }, AnimationDurationMs + 60);
-
-            break; // ✅ handle only one drawer per observer batch
-          }
-        }
-      }
-    }
-  };
+  // ---------- Public helpers ----------
 
   DrawerController.prototype._FindAncestorDrawer = function (node) {
     while (node && node !== document) {
@@ -719,8 +380,6 @@
     }
     return null;
   };
-
-  // ---------- Public helpers ----------
 
   DrawerController.prototype.OpenById = function (id) {
     // Queue programmatic opens during animation
@@ -734,10 +393,6 @@
     if (!drawer) return;
     if (!drawer.classList.contains("Drawer--Open")) {
       this.OpenDrawer(drawer);
-      // Suppress IO to avoid chain-opening via layout shift
-      this._suppressIOUntil = this._now() + 450;
-      // Also freeze input briefly to absorb momentum
-      this.FreezeInput(450);
 
       if (OnlyOneOpenAtATime) {
         var self2 = this;
@@ -773,29 +428,17 @@
   // ---------- Boot ----------
 
   function InitializeDrawersWhenReady() {
-    document.documentElement.style.setProperty(
-      "--ViewportAnchorTriggerLinePositionVh",
-      (ViewportAnchorFraction * 100) + "vh"
-    );
-
-    // visual guide line (optional)
-    var guide = document.createElement("div");
-    guide.className = "TriggerLine";
-    document.body.appendChild(guide);
-
     var instance = new DrawerController(document);
     window.DrawersController = instance;
 
-    // Open Intro once layout settles (and keep IO quiet while we do it)
+    // Open Intro once layout settles (optional)
     function openIntro() {
       var intro = document.getElementById("Intro");
-      if (!intro) { instance._booting = false; return; }
+      if (!intro) return;
 
-      // Safe auto-advance: Intro -> About
+      // Optional: auto-advance example Intro -> About
       instance._wireAutoAdvanceVideo("Intro", "About");
-      // instance._wireAutoAdvanceVideo("Tour", "Capabilities");
 
-      instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
       instance.OpenById("Intro");
 
       var vid = intro.querySelector("video");
@@ -807,8 +450,6 @@
           if (p && typeof p.catch === "function") p.catch(function(){});
         } catch (e) {}
       }
-
-      setTimeout(function () { instance._booting = false; }, SuppressIOAfterBootMs);
     }
 
     requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
