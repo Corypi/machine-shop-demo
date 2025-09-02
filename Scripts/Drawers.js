@@ -260,6 +260,12 @@
     drawer.classList.remove("Drawer--Open");
     drawer.classList.remove("Drawer--NoTail");
     this.SetAriaExpanded(drawer, false);
+    // If the closed drawer is the hero, collapse it out of flow and show the tab bar
+var heroIdNow = this._heroId();
+if (heroIdNow && drawer.id === heroIdNow) {
+  this._forceRemoveFromFlow(drawer);
+  this._ensureTabBarVisible();
+}
 
     document.dispatchEvent(new CustomEvent("drawer:closed", { detail: { id: drawer.id }}));
 
@@ -286,23 +292,31 @@
   };
 
   DrawerController.prototype.CloseSiblings = function (exceptDrawer, removeHero) {
-    var heroId = this._heroId();
-    for (var i = 0; i < this._drawers.length; i++) {
-      var d = this._drawers[i];
-      if (d === exceptDrawer) continue;
+  var heroId = this._heroId();
+  for (var i = 0; i < this._drawers.length; i++) {
+    var d = this._drawers[i];
+    if (d === exceptDrawer) continue;
 
-      if (d.classList.contains("Drawer--Open")) {
-        this.CloseDrawer(d);
-      }
-
-      if (removeHero && heroId && d.id === heroId && d.style.display !== "none") {
-        this._forceRemoveFromFlow(d);
-      } else {
-        d.removeAttribute("hidden");
-        d.style.display = "";
-      }
+    // 1) close any open sibling
+    if (d.classList.contains("Drawer--Open")) {
+      this.CloseDrawer(d);
     }
-  };
+
+    // 2) special-case hero: never re-show it once we’re removing it
+    if (removeHero && heroId && d.id === heroId) {
+      // make sure hero is OUT of flow and stays that way
+      if (d.style.display !== "none" || !d.hasAttribute("hidden")) {
+        this._forceRemoveFromFlow(d);
+      }
+      // do NOT fall through to the generic "re-show" branch
+      continue;
+    }
+
+    // 3) all non-hero siblings remain visible in flow
+    d.removeAttribute("hidden");
+    d.style.display = "";
+  }
+};
 
   // ---------- Animation + ARIA ----------
 
