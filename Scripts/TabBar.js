@@ -57,6 +57,7 @@
   TabBarController.prototype._wire = function(){
     var self = this;
 
+    // Update tabs when drawers actually open
     document.addEventListener("drawer:opened", function(e){
       if (e && e.detail && e.detail.id){
         self.setActive(e.detail.id);
@@ -65,17 +66,7 @@
       }
     });
 
-    var ticking = false;
-    window.addEventListener("scroll", function(){
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(function(){
-        ticking = false;
-        var id = self._syncByAnchor();
-        self._applyVisibility(id);
-        // visibility is driven by drawer:opened + _renderTabsVisibility
-      });
-    }, {passive:true});
+    // No anchor-based auto-activation anymore.
   };
 
   TabBarController.prototype._onTabClick = function(evt){
@@ -97,81 +88,57 @@
     }
   };
 
-  TabBarController.prototype._syncByAnchor = function(){
-    var vh = window.innerHeight || document.documentElement.clientHeight;
-    var anchorY = vh * 0.35;
-    var best = null, bestDist = Infinity;
-
-    for (var i=0; i<this._order.length; i++){
-      var id = this._order[i];
-      var d  = document.getElementById(id);
-      if (!d) continue;
-      var title = d.querySelector("[data-drawer-summary]") || d;
-      var rect = title.getBoundingClientRect();
-      var dist = Math.abs(rect.top - anchorY);
-      if (dist < bestDist){
-        bestDist = dist; best = id;
-      }
-    }
-    if (best && best !== this._active){
-      this.setActive(best);
-    }
-    return best || this._active;
-  };
-
   TabBarController.prototype._applyVisibility = function(activeId){
-  var shouldShow = !!activeId && activeId !== this._heroId;
+    var shouldShow = !!activeId && activeId !== this._heroId;
 
-  // toggle body class for styling
-  document.body.classList.toggle("Tabs--Visible", shouldShow);
+    // toggle body class for styling
+    document.body.classList.toggle("Tabs--Visible", shouldShow);
 
-  // toggle aria-hidden on bar
-  if (this._elBar){
-    this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
-  }
-
-  // On first leave from hero, collapse it and snap the active drawer under the bar
-  if (activeId && activeId !== this._heroId && !this._heroCollapsed){
-    var hero = document.getElementById(this._heroId);
-    if (hero){
-      hero.style.display = "none";
-      this._heroCollapsed = true;
-
-      // Snap the current active drawer's title under the 56px tab bar
-      var active = document.getElementById(activeId);
-      if (active){
-        var title = active.querySelector("[data-drawer-summary]") || active;
-        var tabBarH = 56; // keep in sync with CSS
-        var targetY = title.getBoundingClientRect().top + window.pageYOffset - tabBarH;
-
-        // Cancel momentum and place exactly
-        window.scrollTo({ top: targetY, behavior: "auto" });
-        requestAnimationFrame(function(){
-          window.scrollTo({ top: targetY, behavior: "auto" });
-        });
-      }
-
-      // Debounce IO + block user scroll during settle
-      if (window.DrawersController){
-        // Keep old suppression for safety
-        if (typeof window.DrawersController._now === "function"){
-          window.DrawersController._suppressIOUntil =
-            window.DrawersController._now() + 500;
-        }
-        // Hard freeze input so other drawers won't auto-open
-        if (typeof window.DrawersController.FreezeInput === "function"){
-          window.DrawersController.FreezeInput(600); // block wheel/touch/key briefly
-        }
-        if (typeof window.DrawersController.ResetAccumulatedInput === "function"){
-          window.DrawersController.ResetAccumulatedInput();
-        }
-      }
-
-      // Ensure Intro tab appears now that hero is collapsed
-      this._renderTabsVisibility && this._renderTabsVisibility();
+    // toggle aria-hidden on bar
+    if (this._elBar){
+      this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
     }
-  }
-};
+
+    // On first leave from hero, collapse it and snap the active drawer under the bar
+    if (activeId && activeId !== this._heroId && !this._heroCollapsed){
+      var hero = document.getElementById(this._heroId);
+      if (hero){
+        hero.style.display = "none";
+        this._heroCollapsed = true;
+
+        // Snap the current active drawer's title under the 56px tab bar
+        var active = document.getElementById(activeId);
+        if (active){
+          var title = active.querySelector("[data-drawer-summary]") || active;
+          var tabBarH = 56; // keep in sync with CSS
+          var targetY = title.getBoundingClientRect().top + window.pageYOffset - tabBarH;
+
+          // Cancel momentum and place exactly
+          window.scrollTo({ top: targetY, behavior: "auto" });
+          requestAnimationFrame(function(){
+            window.scrollTo({ top: targetY, behavior: "auto" });
+          });
+        }
+
+        // Debounce IO + block user scroll during settle
+        if (window.DrawersController){
+          if (typeof window.DrawersController._now === "function"){
+            window.DrawersController._suppressIOUntil =
+              window.DrawersController._now() + 500;
+          }
+          if (typeof window.DrawersController.FreezeInput === "function"){
+            window.DrawersController.FreezeInput(600); // block wheel/touch/key briefly
+          }
+          if (typeof window.DrawersController.ResetAccumulatedInput === "function"){
+            window.DrawersController.ResetAccumulatedInput();
+          }
+        }
+
+        // Ensure Intro tab appears now that hero is collapsed
+        this._renderTabsVisibility && this._renderTabsVisibility();
+      }
+    }
+  };
 
   // 🔑 Only show tabs up to (and including) the active index.
   TabBarController.prototype._renderTabsVisibility = function(){
@@ -189,7 +156,7 @@
         continue;
       }
 
-      var show = i <= activeIdx;  // progressive reveal
+      var show = i <= activeIdx;  // progressive reveal (now tied ONLY to opened/clicked)
       t.style.display = show ? "inline-block" : "none";
     }
   };
@@ -209,6 +176,7 @@
       cur.setAttribute("aria-selected","true");
     }
 
+    // Past-state cosmetics
     var seenActive = false;
     for (var i=0; i<this._order.length; i++){
       var cid = this._order[i];
