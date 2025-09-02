@@ -417,6 +417,7 @@
     var title = drawer.querySelector("[data-drawer-summary]") || drawer;
     var y = title.getBoundingClientRect().top + window.pageYOffset - 16;
     window.scrollTo({ top: y, behavior: "smooth" });
+    // Could emit an event here if you want TabBar to react to programmatic scroll.
   };
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
