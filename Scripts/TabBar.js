@@ -1,4 +1,3 @@
-<script>
 (function(){
   "use strict";
 
@@ -16,19 +15,28 @@
   }
 
   TabBarController.prototype._buildFromDrawers = function(){
-    var drawers = document.querySelectorAll("[data-drawer]");
+    // Clear any existing tabs if script re-inits
+    this._tabs.clear();
     this._order = [];
+    this._track.innerHTML = "";
+
+    var drawers = document.querySelectorAll("[data-drawer]");
     for (var i=0; i<drawers.length; i++){
       var d = drawers[i];
       var id = d.id || ("drawer-"+i);
       if (!d.id) d.id = id;
       this._order.push(id);
 
-      var title = (d.querySelector("[data-drawer-summary]") || d).textContent.trim();
+      var titleEl = d.querySelector("[data-drawer-summary]") || d;
+      var title = (titleEl.textContent || "").trim();
+
       var tab = document.createElement("button");
       tab.className = "Tab";
+      tab.type = "button";
       tab.setAttribute("role","tab");
+      tab.setAttribute("aria-selected","false");
       tab.setAttribute("data-tab-target", id);
+      tab.setAttribute("aria-controls", id);
       tab.textContent = title;
       tab.addEventListener("click", this._onTabClick.bind(this));
       this._track.appendChild(tab);
@@ -72,7 +80,7 @@
     } else {
       var el = document.getElementById(id);
       if (el){
-        var y = el.getBoundingClientRect().top + window.pageYOffset - 56;
+        var y = el.getBoundingClientRect().top + window.pageYOffset - 56; // TabBar height
         window.scrollTo({ top: y, behavior: "smooth" });
       }
     }
@@ -102,13 +110,17 @@
   TabBarController.prototype.setActive = function(id){
     if (!this._tabs.size) return;
 
-    // classes
+    // classes + ARIA
     if (this._active && this._tabs.has(this._active)){
-      this._tabs.get(this._active).classList.remove("Tab--Active");
+      var prev = this._tabs.get(this._active);
+      prev.classList.remove("Tab--Active");
+      prev.setAttribute("aria-selected","false");
     }
     this._active = id;
     if (this._tabs.has(id)){
-      this._tabs.get(id).classList.add("Tab--Active");
+      var cur = this._tabs.get(id);
+      cur.classList.add("Tab--Active");
+      cur.setAttribute("aria-selected","true");
     }
 
     // mark all tabs up to active as "past", others normal
@@ -129,7 +141,17 @@
     }
   };
 
-  // expose
-  window.TabBar = new TabBarController();
+  // Boot
+  function init(){
+    // Avoid re-initializing if already present
+    if (window.TabBar && window.TabBar._elBar) return;
+    window.TabBar = new TabBarController();
+  }
+
+  if (document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
+
 })();
-</script>
