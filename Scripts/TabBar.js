@@ -121,25 +121,29 @@
   };
 
     TabBarController.prototype._applyVisibility = function(activeId){
-    var shouldShow = !!activeId && activeId !== this._heroId;
+  var shouldShow = !!activeId && activeId !== this._heroId;
 
-    // toggle body class for styling
-    document.body.classList.toggle("Tabs--Visible", shouldShow);
+  // toggle body class for styling
+  document.body.classList.toggle("Tabs--Visible", shouldShow);
 
-    // toggle aria-hidden on bar
-    if (this._elBar){
-      this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
-    }
+  // toggle aria-hidden on bar
+  if (this._elBar){
+    this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+  }
 
-    // special collapse rule for the hero drawer
-    if (activeId && activeId !== this._heroId && !this._heroCollapsed){
-      var hero = document.getElementById(this._heroId);
-      if (hero){
-        hero.style.display = "none"; // hide intro once About is active
-        this._heroCollapsed = true;
+  // special collapse rule for the hero drawer
+  if (activeId && activeId !== this._heroId && !this._heroCollapsed){
+    var hero = document.getElementById(this._heroId);
+    if (hero){
+      hero.style.display = "none"; // hide intro once About is active
+      this._heroCollapsed = true;
+      // 👇 ensure the Intro tab appears immediately
+      if (this._tabs.has(this._heroId)) {
+        this._tabs.get(this._heroId).style.display = "inline-block";
       }
     }
-  };
+  }
+};
 
   TabBarController.prototype.setActive = function(id){
     if (!this._tabs.size) return;
