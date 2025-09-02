@@ -39,13 +39,16 @@
   }
 
   // --- utilities for snapping under the TabBar ---
+  DrawerController.prototype._tabBarEl = function(){
+    return document.getElementById("TabBar");
+  };
+
   DrawerController.prototype._tabBarHeight = function(){
-    var el = document.getElementById("TabBar");
+    var el = this._tabBarEl();
     var h = el ? el.getBoundingClientRect().height : 56;
     return (h && h > 0) ? h : 56;
   };
 
-  // Snap immediately (best-effort)
   DrawerController.prototype._snapActiveUnderTabs = function(drawer){
     if (!drawer) return;
     var title = drawer.querySelector("[data-drawer-summary]") || drawer;
@@ -53,24 +56,33 @@
     window.scrollTo({ top: y, behavior: "auto" });
   };
 
-  // Snap, but defer until the TabBar has become visible / has height
+  // Retry snapping until TabBar is visible and body has Tabs--Visible
   DrawerController.prototype._snapActiveUnderTabsDeferred = function(drawer){
     var self = this;
     var tries = 0;
-    function again(){
-      tries++;
-      // Wait a frame for TabBar visibility toggle
-      requestAnimationFrame(function(){
-        // If TabBar still 0-height on first frame (common), try a second one
-        var h = self._tabBarHeight();
-        if (h <= 1 && tries < 3){
-          again();
-          return;
-        }
-        self._snapActiveUnderTabs(drawer);
-      });
+    var maxTries = 20; // ~20 rAFs ≈ 300–350ms; plenty for first reveal
+
+    function ready(){
+      var el = self._tabBarEl();
+      var h = el ? el.getBoundingClientRect().height : 0;
+      var vis = document.body.classList.contains("Tabs--Visible");
+      return (h > 1) && vis;
     }
-    again();
+
+    function loop(){
+      if (ready()){
+        self._snapActiveUnderTabs(drawer);
+        return;
+      }
+      tries++;
+      if (tries >= maxTries){
+        // Best-effort snap even if TabBar height didn’t report yet
+        self._snapActiveUnderTabs(drawer);
+        return;
+      }
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
   };
 
   // Identify the hero/intro drawer (first in DOM with data-drawer)
@@ -88,7 +100,7 @@
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       d.classList.remove("Drawer--Open", "Drawer--NoTail");
-      d.style.display = ""; // keep all visible in flow (except we may later hide hero after leaving it)
+      d.style.display = ""; // keep all visible in flow (only hero may later hide)
       var c = d.querySelector("[data-drawer-content]");
       if (c) c.style.height = "";
     }
@@ -130,7 +142,7 @@
     if (drawer.classList.contains("Drawer--Open")) {
       this.CloseAndLock(drawer);
     } else {
-      drawer.style.display = ""; // ensure visible (in case it was previously hidden, e.g., hero after leave)
+      drawer.style.display = ""; // ensure visible (if hero was hidden previously)
 
       this.OpenDrawer(drawer);
 
@@ -171,7 +183,7 @@
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
-    // 🔔 notify tab bar
+    // 🔔 notify tab bar (TabBar shows + updates selected tab)
     document.dispatchEvent(new CustomEvent("drawer:opened", { detail: { id: drawer.id }}));
 
     var self = this;
@@ -233,7 +245,7 @@
     drawer.classList.remove("Drawer--NoTail");
     this.SetAriaExpanded(drawer, false);
 
-    // 🔔 notify tab bar
+    // 🔔 notify tab bar (TabBar may keep tab visible; it controls display)
     document.dispatchEvent(new CustomEvent("drawer:closed", { detail: { id: drawer.id }}));
 
     // Pause/rewind any videos in this drawer
@@ -456,7 +468,7 @@
     var drawer = document.getElementById(id);
     if (!drawer) return;
 
-    // make sure it's visible (e.g., hero could have been hidden)
+    // ensure visible (e.g., hero could have been hidden previously)
     drawer.style.display = "";
 
     if (!drawer.classList.contains("Drawer--Open")) {
@@ -472,7 +484,7 @@
       }
     }
 
-    // Defer snapping to let TabBar appear first
+    // Defer snapping to let TabBar appear first (first-time open)
     this._snapActiveUnderTabsDeferred(drawer);
   };
 
@@ -497,8 +509,16 @@
   };
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
+    // Explicit sequencing: close first, then open (queued)
     if (closeId) this.CloseById(closeId);
-    this.OpenById(openId);              // handles defer-snap + hero-hiding of siblings if needed
+
+    var self = this;
+    this._enqueue(function(){
+      self.OpenById(openId);
+    });
+
+    // Drain immediately in case no animation is in-flight
+    this._drainQueue();
   };
 
   // ---------- Boot ----------
