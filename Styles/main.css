@@ -62,6 +62,7 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 html, body { overflow-x: hidden; }
+html, body { overscroll-behavior: contain; }
 
 body {
   margin: 0;
