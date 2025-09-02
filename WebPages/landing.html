@@ -8,13 +8,6 @@
 </head>
 <body>
 
-  <!-- Sticky Tab Bar -->
-  <div id="TabBar" class="TabBar" role="tablist" aria-label="Sections">
-    <div id="TabBarTrack" class="TabBarTrack"></div>
-  </div>
-  <!-- Spacer so fixed TabBar doesn't overlap content (height matches TabBar) -->
-  <div aria-hidden="true" style="height:56px"></div>
-
   <!-- Thin visual marker for the auto-toggle trigger (35% from top) -->
   <div class="TriggerLine" aria-hidden="true"></div>
 
@@ -25,6 +18,11 @@
     <h1 class="HeaderTitle">Welcome to Our Machine Shop</h1>
     <p class="HeaderSubtitle">High-precision parts, modern capabilities.</p>
   </header>
+
+  <!-- Sticky Tab Bar (hidden by default; shown when body gets Tabs--Visible) -->
+  <div id="TabBar" class="TabBar" role="tablist" aria-label="Sections" aria-hidden="true">
+    <div id="TabBarTrack" class="TabBarTrack"></div>
+  </div>
 
   <!-- ======================================================
        Main
