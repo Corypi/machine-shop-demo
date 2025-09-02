@@ -27,7 +27,7 @@
       while (this._queue.length) {
         var fn = this._queue.shift();
         try { fn(); } catch (e) {}
-        if (this._isAnimating) break; // stop if the action kicked a new animation
+        if (this._isAnimating) break;
       }
     };
 
@@ -38,7 +38,13 @@
     this.Initialize();
   }
 
-  // --- utilities for snapping under the TabBar ---
+  // ---------- Helpers: hero + TabBar + snap ----------
+
+  DrawerController.prototype._heroId = function(){
+    if (!this._drawers || !this._drawers.length) return null;
+    return this._drawers[0] && this._drawers[0].id ? this._drawers[0].id : null;
+  };
+
   DrawerController.prototype._tabBarEl = function(){
     return document.getElementById("TabBar");
   };
@@ -49,58 +55,83 @@
     return (h && h > 0) ? h : 56;
   };
 
-  DrawerController.prototype._snapActiveUnderTabs = function(drawer){
+  DrawerController.prototype._ensureTabBarVisible = function(){
+    var bar = this._tabBarEl();
+    if (bar){
+      document.body.classList.add("Tabs--Visible");
+      bar.setAttribute("aria-hidden", "false");
+    }
+  };
+
+  DrawerController.prototype._snapUnderTabs = function(drawer){
     if (!drawer) return;
     var title = drawer.querySelector("[data-drawer-summary]") || drawer;
     var y = title.getBoundingClientRect().top + window.pageYOffset - this._tabBarHeight();
     window.scrollTo({ top: y, behavior: "auto" });
   };
 
-  // Retry snapping until TabBar is visible and body has Tabs--Visible
-  DrawerController.prototype._snapActiveUnderTabsDeferred = function(drawer){
-    var self = this;
-    var tries = 0;
-    var maxTries = 24; // ~350–400ms
-
+  // Retry snapping until TabBar has a height (first-time open)
+  DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
+    var self = this, tries = 0, maxTries = 24;
     function ready(){
-      var el = self._tabBarEl();
-      var h = el ? el.getBoundingClientRect().height : 0;
-      var vis = document.body.classList.contains("Tabs--Visible");
-      return (h > 1) && vis;
+      var bar = self._tabBarEl();
+      var h = bar ? bar.getBoundingClientRect().height : 0;
+      return h > 1 && document.body.classList.contains("Tabs--Visible");
     }
-
-    function loop(){
-      if (ready()){
-        self._snapActiveUnderTabs(drawer);
-        return;
-      }
-      tries++;
-      if (tries >= maxTries){
-        // Best-effort snap even if TabBar height didn’t report yet
-        self._snapActiveUnderTabs(drawer);
-        return;
-      }
+    (function loop(){
+      if (ready()){ self._snapUnderTabs(drawer); return; }
+      if (++tries >= maxTries){ self._snapUnderTabs(drawer); return; }
       requestAnimationFrame(loop);
-    }
-    requestAnimationFrame(loop);
+    })();
   };
 
-  // Identify the hero/intro drawer (first in DOM with data-drawer)
-  DrawerController.prototype._heroId = function(){
-    if (!this._drawers || !this._drawers.length) return null;
-    var d = this._drawers[0];
-    return d && d.id ? d.id : null;
+  // Wait for a drawer content's height transition to end (with fallback)
+  function waitForHeightTransition(drawer, fallbackMs){
+    return new Promise(function(resolve){
+      var content = drawer && drawer.querySelector && drawer.querySelector("[data-drawer-content]");
+      var done = false;
+      var to = setTimeout(function(){
+        if (done) return; done = true; resolve();
+      }, Math.max(120, fallbackMs || (AnimationDurationMs + 120)));
+      if (!content) return; // fallback timer will resolve
+
+      function onEnd(e){
+        if (e.propertyName !== "height") return;
+        content.removeEventListener("transitionend", onEnd);
+        if (done) return; done = true;
+        clearTimeout(to);
+        resolve();
+      }
+      content.addEventListener("transitionend", onEnd);
+    });
+  }
+
+  // Collapse (close), then remove a drawer from layout
+  DrawerController.prototype._collapseAndRemoveFromFlow = function(drawer){
+    if (!drawer) return Promise.resolve();
+    // If it is open, close it to animate height to 0 first
+    if (drawer.classList.contains("Drawer--Open")) {
+      this.CloseDrawer(drawer);
+    }
+    var self = this;
+    return waitForHeightTransition(drawer, AnimationDurationMs + 120).then(function(){
+      drawer.style.display = "none"; // remove from layout after close is done
+      // Let TabBar know hero is effectively gone
+      document.dispatchEvent(new CustomEvent("drawer:collapsed", { detail: { id: drawer.id }}));
+    });
   };
+
+  // ===================================================
 
   DrawerController.prototype.Initialize = function () {
     this._drawers = this._root.querySelectorAll("[data-drawer]");
     this._summaries = this._root.querySelectorAll("[data-drawer-summary]");
 
-    // Start EVERYTHING closed (ignore whatever HTML had)
+    // Start EVERYTHING closed, visible in flow (no display:none)
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       d.classList.remove("Drawer--Open", "Drawer--NoTail");
-      d.style.display = ""; // keep all visible in flow (no display:none)
+      d.style.display = "";
       var c = d.querySelector("[data-drawer-content]");
       if (c) c.style.height = "";
     }
@@ -126,7 +157,6 @@
   };
 
   DrawerController.prototype.OnToggleRequested = function (evt) {
-    // Queue user clicks if an animation is active
     if (this._isAnimating) {
       var self = this, target = evt.currentTarget;
       this._enqueue(function () {
@@ -139,55 +169,44 @@
     var drawer = summary.closest ? summary.closest("[data-drawer]") : this._FindAncestorDrawer(summary);
     if (!drawer) return;
 
+    var heroId = this._heroId();
+
     if (drawer.classList.contains("Drawer--Open")) {
       this.CloseAndLock(drawer);
     } else {
       drawer.style.display = ""; // ensure visible
+      var self2 = this;
 
-      this.OpenDrawer(drawer);
-
-      if (OnlyOneOpenAtATime) {
-        var self2 = this;
-        if (this._isAnimating) {
-          this._enqueue(function(){
-            self2.CloseSiblings(drawer, /*hideHeroOnly*/true);
+      // If opening something that is NOT the hero, remove hero from flow so snap is clean
+      var collapseHeroPromise = Promise.resolve();
+      if (heroId && drawer.id !== heroId) {
+        var hero = document.getElementById(heroId);
+        if (hero && hero.style.display !== "none") {
+          collapseHeroPromise = this._collapseAndRemoveFromFlow(hero).then(function(){
+            self2._ensureTabBarVisible();
           });
         } else {
-          this.CloseSiblings(drawer, /*hideHeroOnly*/true);
+          self2._ensureTabBarVisible();
         }
       }
 
-      // Defer snapping to allow TabBar to appear (height becomes non-zero)
-      this._snapActiveUnderTabsDeferred(drawer);
+      collapseHeroPromise.then(function(){
+        self2.OpenDrawer(drawer);
+
+        if (OnlyOneOpenAtATime) {
+          if (self2._isAnimating) {
+            self2._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
+          } else {
+            self2.CloseSiblings(drawer, /*removeHero*/true);
+          }
+        }
+
+        self2._snapUnderTabsDeferred(drawer);
+      });
     }
   };
 
   // ---------- Programmatic open/close ----------
-
-  // Wait for a drawer's height transition to end (with fallback timer)
-  function waitForHeightTransition(drawer, fallbackMs){
-    return new Promise(function(resolve){
-      var content = drawer && drawer.querySelector && drawer.querySelector("[data-drawer-content]");
-      var done = false;
-      var to = setTimeout(function(){
-        if (done) return;
-        done = true;
-        resolve();
-      }, Math.max(120, fallbackMs || (AnimationDurationMs + 120)));
-
-      if (!content) return; // fallback timer will resolve
-
-      function onEnd(e){
-        if (e.propertyName !== "height") return;
-        content.removeEventListener("transitionend", onEnd);
-        if (done) return;
-        done = true;
-        clearTimeout(to);
-        resolve();
-      }
-      content.addEventListener("transitionend", onEnd);
-    });
-  }
 
   DrawerController.prototype.OpenDrawer = function (drawer) {
     var content = drawer.querySelector("[data-drawer-content]");
@@ -213,31 +232,25 @@
 
     var self = this;
 
-    // Measure end height with inline height cleared so CSS (dvh clamp) can apply
     function measureEndHeight() {
       var prevH = content.style.height;
       var prevT = content.style.transition;
       content.style.transition = "";
-      content.style.height = ""; // let CSS open-state height apply
+      content.style.height = "";
       void content.offsetHeight;
 
       var end = content.getBoundingClientRect().height;
-      if (!end || end < 1) {
-        end = content.scrollHeight;
-      }
+      if (!end || end < 1) end = content.scrollHeight;
 
-      // Restore start height for the animation
       content.style.height = prevH || (Math.max(0, startHeight) + "px");
       content.style.transition = prevT;
       void content.offsetHeight;
       return Math.max(0, Math.round(end));
     }
 
-    // Run after layout applies the open class
     requestAnimationFrame(function () {
       var endHeight = measureEndHeight();
 
-      // Fast-path: if there's nothing to animate, finish immediately (prevents lock)
       if (Math.abs(endHeight - startHeight) < 0.5) {
         content.style.transition = "";
         if (drawer.classList.contains("Drawer--FixedHero") ||
@@ -255,7 +268,6 @@
       self.AnimateHeight(content, startHeight, endHeight);
     });
 
-    // Keep open panels healthy if media sizes even later
     this._wireMediaAutoGrow(content);
   };
 
@@ -279,7 +291,6 @@
     }
 
     var endHeight = 0;
-    // If nothing to animate, finish immediately
     if (Math.abs(endHeight - startHeight) < 0.5) {
       content.style.transition = "";
       content.style.height = "";
@@ -297,10 +308,9 @@
   };
 
   /**
-   * Close siblings. If hideHeroOnly=true, we do NOT display:none the hero anymore.
-   * We keep it in the flow (collapsed) so probes/layout stay valid.
+   * Close siblings; if removeHero=true, the hero (Intro) is collapsed & removed from flow.
    */
-  DrawerController.prototype.CloseSiblings = function (exceptDrawer, hideHeroOnly) {
+  DrawerController.prototype.CloseSiblings = function (exceptDrawer, removeHero) {
     var heroId = this._heroId();
     for (var i = 0; i < this._drawers.length; i++) {
       var d = this._drawers[i];
@@ -310,8 +320,13 @@
         this.CloseDrawer(d);
       }
 
-      // Keep all drawers visible in flow (no display:none), including hero.
-      d.style.display = "";
+      if (removeHero && heroId && d.id === heroId && d.style.display !== "none") {
+        // collapse + remove hero to detach About from it
+        this._collapseAndRemoveFromFlow(d);
+      } else {
+        // keep others visible in flow
+        d.style.display = "";
+      }
     }
   };
 
@@ -321,7 +336,6 @@
     var self = this;
 
     if (this._isAnimating) {
-      // snap any in-flight to end state to avoid lock
       element.style.transition = "";
       element.style.height = endHeight > 0 ? (endHeight + "px") : "";
     }
@@ -426,7 +440,7 @@
     }
   };
 
-  // --- Auto-advance video drawers (optional; remove if undesired) ---
+  // --- Optional: auto-advance a video drawer ---
   DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
     var drawer = document.getElementById(drawerId);
     if (!drawer) return;
@@ -472,7 +486,6 @@
   };
 
   DrawerController.prototype.OpenById = function (id) {
-    // Queue programmatic opens during animation
     if (this._isAnimating) {
       var self = this;
       this._enqueue(function(){ self.OpenById(id); });
@@ -482,31 +495,36 @@
     var drawer = document.getElementById(id);
     if (!drawer) return;
 
-    // ensure visible (no display:none)
-    drawer.style.display = "";
-
-    if (!drawer.classList.contains("Drawer--Open")) {
-      this.OpenDrawer(drawer);
-
-      if (OnlyOneOpenAtATime) {
-        var self2 = this;
-        if (this._isAnimating) {
-          this._enqueue(function(){ self2.CloseSiblings(drawer, /*hideHeroOnly*/true); });
-        } else {
-          this.CloseSiblings(drawer, /*hideHeroOnly*/true);
-        }
+    var heroId = this._heroId();
+    // If opening a non-hero, remove hero from flow first
+    var maybeCollapse = Promise.resolve();
+    if (heroId && id !== heroId) {
+      var hero = document.getElementById(heroId);
+      if (hero && hero.style.display !== "none") {
+        maybeCollapse = this._collapseAndRemoveFromFlow(hero).then(this._ensureTabBarVisible.bind(this));
+      } else {
+        this._ensureTabBarVisible();
       }
     }
 
-    // Make sure TabBar is visible for first non-hero open
-    var tabBar = this._tabBarEl();
-    if (tabBar && !document.body.classList.contains("Tabs--Visible")) {
-      document.body.classList.add("Tabs--Visible");
-      tabBar.setAttribute("aria-hidden","false");
-    }
+    var self2 = this;
+    maybeCollapse.then(function(){
+      drawer.style.display = "";
 
-    // Defer snapping to let TabBar appear first
-    this._snapActiveUnderTabsDeferred(drawer);
+      if (!drawer.classList.contains("Drawer--Open")) {
+        self2.OpenDrawer(drawer);
+
+        if (OnlyOneOpenAtATime) {
+          if (self2._isAnimating) {
+            self2._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
+          } else {
+            self2.CloseSiblings(drawer, /*removeHero*/true);
+          }
+        }
+      }
+
+      self2._snapUnderTabsDeferred(drawer);
+    });
   };
 
   DrawerController.prototype.CloseById = function (id) {
@@ -528,36 +546,38 @@
 
     if (closeId) {
       var closeEl = document.getElementById(closeId);
+      var heroId  = this._heroId();
 
       if (closeEl && closeEl.classList.contains("Drawer--Open")) {
         this.CloseById(closeId);
       }
 
-      // Wait for close animation, then open target.
+      // After the close animation, if the closed one is the hero, remove from flow
       waitForHeightTransition(closeEl || document.body, AnimationDurationMs + 120).then(function(){
-        // Open the target
-        self.OpenById(openId);
-
-        // Ensure TabBar is visible for the very first non-hero open
-        var tabBar = self._tabBarEl();
-        if (tabBar && !document.body.classList.contains("Tabs--Visible")) {
-          document.body.classList.add("Tabs--Visible");
-          tabBar.setAttribute("aria-hidden","false");
+        var after = Promise.resolve();
+        if (heroId && closeId === heroId && closeEl && closeEl.style.display !== "none") {
+          after = self._collapseAndRemoveFromFlow(closeEl).then(function(){
+            self._ensureTabBarVisible();
+          });
+        } else {
+          self._ensureTabBarVisible();
         }
 
-        // Defer snap (multiple rAFs for safety)
-        var target = document.getElementById(openId);
-        self._snapActiveUnderTabsDeferred(target);
-        requestAnimationFrame(function(){
+        after.then(function(){
+          self.OpenById(openId);
+          var target = document.getElementById(openId);
+          self._snapUnderTabsDeferred(target);
           requestAnimationFrame(function(){
-            self._snapActiveUnderTabsDeferred(target);
+            requestAnimationFrame(function(){
+              self._snapUnderTabsDeferred(target);
+            });
           });
         });
       });
       return;
     }
 
-    // Otherwise just open target (and defer snap)
+    // Otherwise just open target
     this.OpenById(openId);
   };
 
