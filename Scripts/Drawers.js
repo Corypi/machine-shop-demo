@@ -60,37 +60,37 @@
     };
 
     // ----- Scroll Input Gate (freeze & accumulate) -----
-this._freezeUntil = 0;       // time (ms) until we allow IO
-this._blockScroll = false;   // actively prevent default scrolling
-this._accumulatedInput = 0;  // ABSOLUTE distance tracker (legacy)
-this._accumulatedSigned = 0; // NEW: signed distance tracker (+down, -up)
-this._touchStartY = null;
+    this._freezeUntil = 0;       // time (ms) until we allow IO
+    this._blockScroll = false;   // actively prevent default scrolling
+    this._accumulatedInput = 0;  // ABSOLUTE distance tracker (legacy)
+    this._accumulatedSigned = 0; // NEW: signed distance tracker (+down, -up)
+    this._touchStartY = null;
 
-this.FreezeInput = function(ms){
-  var now = this._now();
-  this._freezeUntil = now + (ms || 500);
-  this._blockScroll = true;
-  this._accumulatedInput = 0;
-  this._accumulatedSigned = 0;
-  var self = this;
-  // release hard block a bit earlier; IO still gated by _freezeUntil
-  setTimeout(function(){ self._blockScroll = false; }, Math.min(ms || 500, 400));
-};
+    this.FreezeInput = function(ms){
+      var now = this._now();
+      this._freezeUntil = now + (ms || 500);
+      this._blockScroll = true;
+      this._accumulatedInput = 0;
+      this._accumulatedSigned = 0;
+      var self = this;
+      // release hard block a bit earlier; IO still gated by _freezeUntil
+      setTimeout(function(){ self._blockScroll = false; }, Math.min(ms || 500, 400));
+    };
 
-this.ResetAccumulatedInput = function(){
-  this._accumulatedInput = 0;
-  this._accumulatedSigned = 0;
-};
+    this.ResetAccumulatedInput = function(){
+      this._accumulatedInput = 0;
+      this._accumulatedSigned = 0;
+    };
 
-this._isFrozen = function(){
-  return this._now() < this._freezeUntil;
-};
+    this._isFrozen = function(){
+      return this._now() < this._freezeUntil;
+    };
 
-// NEW: one place to keep our “detent” distance
-this._threshold = function(){
-  // Tunable: how much user scroll input must be applied to step sections
-  return 320; // px of input (wheel/touch/key), adjust to taste
-};
+    // NEW: one place to keep our “detent” distance
+    this._threshold = function(){
+      // Tunable: how much user scroll input must be applied to step sections
+      return 320; // px of input (wheel/touch/key), adjust to taste
+    };
 
     this.Initialize();
   }
@@ -467,145 +467,156 @@ this._threshold = function(){
 
   // ---------- Auto open on scroll (bidirectional) ----------
   DrawerController.prototype.EnableScrollAutoToggle = function () {
-  var self = this;
+    var self = this;
 
-  // === Helpers ===
-  function currentIndex(){
-    // first open wins; if none open, logical “-1” so first step opens 0
-    for (var i = 0; i < self._drawers.length; i++){
-      if (self._drawers[i].classList.contains("Drawer--Open")) return i;
+    // === Helpers ===
+    function recordDirection(dy){
+      if (dy > 0)      self._scrollDirection = 1;
+      else if (dy < 0) self._scrollDirection = -1;
+      // if dy === 0, leave as-is
     }
-    return -1;
-  }
 
-  function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
-
-  function openAtIndex(nextIndex){
-    nextIndex = clamp(nextIndex, 0, self._drawers.length - 1);
-    var d = self._drawers[nextIndex];
-    if (!d) return;
-
-    // step action: open the one drawer, close others, scroll it into position
-    self.OpenDrawer(d);
-    if (self._isAnimating){
-      self._enqueue(function(){ self.CloseSiblings(d); });
-    } else {
-      self.CloseSiblings(d);
-    }
-    self.ScrollToDrawer(d.id);
-
-    // gate further input for a tick so momentum doesn’t cascade
-    self.ResetAccumulatedInput();
-    self.FreezeInput(700);
-    self._suppressIOUntil = self._now() + 300;
-  }
-
-  function maybeStep(){
-    if (self._isFrozen() || self._isAnimating) return;
-
-    var thr = self._threshold();
-    var val = self._accumulatedSigned;
-
-    if (val >= thr){
-      // step DOWN
-      var idx = currentIndex();
-      openAtIndex(idx + 1);
-    } else if (val <= -thr){
-      // step UP
-      var idx2 = currentIndex();
-      // if nothing open yet (-1), stepping up means open first (0)
-      openAtIndex(idx2 < 0 ? 0 : idx2 - 1);
-    }
-  }
-
-  // === Input listeners (wheel/touch/key) ===
-  function onWheel(e){
-    if (self._blockScroll || self._isFrozen()){
-      try { e.preventDefault(); } catch(_) {}
-      return;
-    }
-    var dy = e.deltaY || 0;
-    self._accumulatedInput  += Math.abs(dy);
-    self._accumulatedSigned += dy;
-    maybeStep();
-  }
-
-  function onTouchStart(e){
-    var t = e.touches && e.touches[0];
-    self._touchStartY = t ? t.clientY : null;
-  }
-
-  function onTouchMove(e){
-    if (self._blockScroll || self._isFrozen()){
-      try { e.preventDefault(); } catch(_) {}
-      return;
-    }
-    var t = e.touches && e.touches[0];
-    if (t && self._touchStartY != null){
-      var dy = self._touchStartY - t.clientY; // down = positive
-      self._touchStartY = t.clientY;
-
+    function applyInput(dy){
+      if (!dy) return;
+      recordDirection(dy);
       self._accumulatedInput  += Math.abs(dy);
       self._accumulatedSigned += dy;
-      maybeStep();
     }
-  }
 
-  function onKeyDown(e){
-    // Only intercept keys that normally scroll
-    var k = e.key || "";
-    var scrollKeys = ["PageDown","PageUp","Home","End"," ","ArrowDown","ArrowUp"];
-    if (self._blockScroll || self._isFrozen()){
-      if (scrollKeys.indexOf(k) >= 0){
-        try { e.preventDefault(); } catch(_) {}
+    function currentIndex(){
+      // first open wins; if none open, logical “-1” so first step opens 0
+      for (var i = 0; i < self._drawers.length; i++){
+        if (self._drawers[i].classList.contains("Drawer--Open")) return i;
       }
-      return;
+      return -1;
     }
-    var step = 120; // emulate approx wheel delta for keys
 
-    if (k === "ArrowDown" || k === "PageDown" || k === " "){
-      self._accumulatedInput  += Math.abs(step);
-      self._accumulatedSigned += step;
-      maybeStep();
-      try { e.preventDefault(); } catch(_) {}
-    }
-    if (k === "ArrowUp" || k === "PageUp"){
-      self._accumulatedInput  += Math.abs(step);
-      self._accumulatedSigned -= step;
-      maybeStep();
-      try { e.preventDefault(); } catch(_) {}
-    }
-    if (k === "Home"){
-      // jump intent: force up step
-      self._accumulatedInput  += Math.abs(step * 2);
-      self._accumulatedSigned -= step * 2;
-      maybeStep();
-      try { e.preventDefault(); } catch(_) {}
-    }
-    if (k === "End"){
-      // jump intent: force down step
-      self._accumulatedInput  += Math.abs(step * 2);
-      self._accumulatedSigned += step * 2;
-      maybeStep();
-      try { e.preventDefault(); } catch(_) {}
-    }
-  }
+    function clamp(n, lo, hi){ return Math.max(lo, Math.min(hi, n)); }
 
-  // IMPORTANT: wheel/touchmove must be non-passive to allow preventDefault
-  window.addEventListener("wheel", onWheel, { passive: false });
-  window.addEventListener("touchstart", onTouchStart, { passive: true });
-  window.addEventListener("touchmove", onTouchMove, { passive: false });
-  window.addEventListener("keydown", onKeyDown, { passive: false });
+    function openAtIndex(nextIndex){
+      nextIndex = clamp(nextIndex, 0, self._drawers.length - 1);
+      var d = self._drawers[nextIndex];
+      if (!d) return;
 
-  // Still track direction (useful for TabBar highlight, etc.)
-  function onScroll(){
-    var y = window.pageYOffset || 0;
-    self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : self._scrollDirection;
-    self._lastScrollY = y;
-  }
-  window.addEventListener("scroll", onScroll, { passive: true });
-  window.addEventListener("resize", onScroll);
-};
+      // step action: open the one drawer, close others, scroll it into position
+      self.OpenDrawer(d);
+      if (self._isAnimating){
+        self._enqueue(function(){ self.CloseSiblings(d); });
+      } else {
+        self.CloseSiblings(d);
+      }
+      self.ScrollToDrawer(d.id);
+
+      // gate further input for a tick so momentum doesn’t cascade
+      self.ResetAccumulatedInput();
+      self.FreezeInput(700);
+      self._suppressIOUntil = self._now() + 300;
+    }
+
+    function maybeStep(){
+      if (self._isFrozen() || self._isAnimating) return;
+
+      var thr = self._threshold();
+      var val = self._accumulatedSigned;
+
+      if (val >= thr){
+        // step DOWN
+        var idx = currentIndex();
+        openAtIndex(idx + 1);
+      } else if (val <= -thr){
+        // step UP
+        var idx2 = currentIndex();
+        // if nothing open yet (-1), stepping up means open first (0)
+        openAtIndex(idx2 < 0 ? 0 : idx2 - 1);
+      }
+    }
+
+    // === Input listeners (wheel/touch/key) ===
+    function onWheel(e){
+      var dy = e.deltaY || 0;
+
+      // Always record direction, even if frozen
+      recordDirection(dy);
+
+      if (self._blockScroll || self._isFrozen()){
+        try { e.preventDefault(); } catch(_) {}
+        return;
+      }
+
+      applyInput(dy);
+      maybeStep();
+    }
+
+    function onTouchStart(e){
+      var t = e.touches && e.touches[0];
+      self._touchStartY = t ? t.clientY : null;
+    }
+
+    function onTouchMove(e){
+      var t = e.touches && e.touches[0];
+      if (!t || self._touchStartY == null) return;
+
+      var dy = self._touchStartY - t.clientY; // down swipe => positive
+      // Always record direction
+      recordDirection(dy);
+
+      if (self._blockScroll || self._isFrozen()){
+        try { e.preventDefault(); } catch(_) {}
+        // still update anchor for next move
+        self._touchStartY = t.clientY;
+        return;
+      }
+
+      self._touchStartY = t.clientY;
+      applyInput(dy);
+      maybeStep();
+    }
+
+    function onTouchEnd(){
+      self._touchStartY = null;
+    }
+
+    function onKeyDown(e){
+      var k = e.key || "";
+      var step = 120; // emulate wheel delta for keys
+      var dy = 0;
+
+      if (k === "ArrowDown" || k === "PageDown" || k === " "){ dy =  step; }
+      if (k === "ArrowUp"   || k === "PageUp"){                 dy = -step; }
+      if (k === "Home"){                                         dy = -step * 2; }
+      if (k === "End"){                                          dy =  step * 2; }
+
+      if (!dy) return; // not a scroll key
+
+      // Always record direction
+      recordDirection(dy);
+
+      // We control the stepping; block native scroll
+      try { e.preventDefault(); } catch(_) {}
+
+      if (self._blockScroll || self._isFrozen()) return;
+
+      applyInput(dy);
+      maybeStep();
+    }
+
+    // IMPORTANT: wheel/touchmove must be non-passive to allow preventDefault
+    window.addEventListener("wheel", onWheel, { passive: false });
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+
+    // Still track direction (useful for TabBar highlight, etc.)
+    function onScroll(){
+      var y = window.pageYOffset || 0;
+      self._scrollDirection = (y > self._lastScrollY) ? 1 : (y < self._lastScrollY) ? -1 : self._scrollDirection;
+      self._lastScrollY = y;
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+  };
+
   DrawerController.prototype._OnIntersections = function (entries) {
     var now = this._now();
     // If we're in a freeze window, ignore IO entirely
@@ -638,8 +649,8 @@ this._threshold = function(){
         if (target.hasAttribute("data-drawer-summary")) {
           if (rectTop <= anchorY && !drawer.classList.contains("Drawer--Open")) {
 
-            // Distance detent: require fresh user input
-            if (this._accumulatedInput < this._threshold()) continue;
+            // Distance detent (signed): require fresh user input in this direction
+            if (this._accumulatedSigned < this._threshold()) continue;
 
             // 🔒 stop chain reactions while we animate/snap
             this._isAnimating = true;
@@ -671,7 +682,8 @@ this._threshold = function(){
         if (target.hasAttribute("data-close-marker")) {
           if (rectTop >= anchorY && !drawer.classList.contains("Drawer--Open")) {
 
-            if (this._accumulatedInput < this._threshold()) continue;
+            // Distance detent (signed): require fresh user input in this direction
+            if (this._accumulatedSigned > -this._threshold()) continue;
 
             // 🔒 stop chain reactions while we animate/snap
             this._isAnimating = true;
