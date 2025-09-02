@@ -9,18 +9,15 @@
     this._heroId  = null;      // first (hero) drawer id
     this._active  = null;
     this._heroCollapsed = false; // track whether Intro has collapsed
-    this._visited = new Set();   // track which sections have been opened
 
     if (!this._elBar || !this._track) return;
 
     this._buildFromDrawers();
     this._wire();
-    // Ensure correct initial visibility (in case Intro is already open)
-    this._applyVisibility(this._active);
+    this._applyVisibility(this._active);  // correct initial state
   }
 
   TabBarController.prototype._buildFromDrawers = function(){
-    // Clear any existing tabs if script re-inits
     this._tabs.clear();
     this._order = [];
     this._track.innerHTML = "";
@@ -43,37 +40,31 @@
       tab.setAttribute("data-tab-target", id);
       tab.setAttribute("aria-controls", id);
       tab.textContent = title;
-      tab.style.display = "none"; // start hidden; renderer decides visibility
+      tab.style.display = "none"; // hidden until allowed
       tab.addEventListener("click", this._onTabClick.bind(this));
       this._track.appendChild(tab);
       this._tabs.set(id, tab);
     }
 
-    // First drawer in document order is treated as the "hero"
     this._heroId = this._order.length ? this._order[0] : null;
 
-    // Make the first visible as active on load
     if (this._order.length){
       this.setActive(this._order[0]);
     }
-    // Initial visibility pass (keeps everything hidden until needed)
     this._renderTabsVisibility();
   };
 
   TabBarController.prototype._wire = function(){
     var self = this;
 
-    // React when drawers open/close
     document.addEventListener("drawer:opened", function(e){
       if (e && e.detail && e.detail.id){
-        self._visited.add(e.detail.id);       // mark visited
         self.setActive(e.detail.id);
         self._applyVisibility(e.detail.id);
         self._renderTabsVisibility();
       }
     });
 
-    // Track scroll to keep highlight in sync
     var ticking = false;
     window.addEventListener("scroll", function(){
       if (ticking) return;
@@ -82,7 +73,7 @@
         ticking = false;
         var id = self._syncByAnchor();
         self._applyVisibility(id);
-        // visibility is re-rendered by drawer:opened events when sections actually open
+        // visibility is driven by drawer:opened + _renderTabsVisibility
       });
     }, {passive:true});
   };
@@ -91,17 +82,16 @@
     var id = evt.currentTarget.getAttribute("data-tab-target");
     if (!id) return;
 
-    this._visited.add(id);          // clicking counts as visited
-    this.setActive(id);             // optimistic UI
-    this._applyVisibility(id);      // ensure bar shows/hides appropriately
-    this._renderTabsVisibility();   // reflect the visit in the UI
+    this.setActive(id);        // optimistic
+    this._applyVisibility(id);
+    this._renderTabsVisibility();
 
     if (window.DrawersController && typeof window.DrawersController.OpenThenCloseAndScroll === "function"){
-      window.DrawersController.OpenThenCloseAndScroll(id, ""); // controller enforces only-one-open
+      window.DrawersController.OpenThenCloseAndScroll(id, "");
     } else {
       var el = document.getElementById(id);
       if (el){
-        var y = el.getBoundingClientRect().top + window.pageYOffset - 56; // TabBar height
+        var y = el.getBoundingClientRect().top + window.pageYOffset - 56;
         window.scrollTo({ top: y, behavior: "smooth" });
       }
     }
@@ -109,7 +99,7 @@
 
   TabBarController.prototype._syncByAnchor = function(){
     var vh = window.innerHeight || document.documentElement.clientHeight;
-    var anchorY = vh * 0.35; // match ViewportAnchorFraction
+    var anchorY = vh * 0.35;
     var best = null, bestDist = Infinity;
 
     for (var i=0; i<this._order.length; i++){
@@ -131,39 +121,39 @@
 
   TabBarController.prototype._applyVisibility = function(activeId){
     var shouldShow = !!activeId && activeId !== this._heroId;
-
-    // toggle body class for styling
     document.body.classList.toggle("Tabs--Visible", shouldShow);
-
-    // toggle aria-hidden on bar
     if (this._elBar){
       this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
     }
 
-    // When we leave the hero for the first time, treat Intro as "visited"
+    // On first leave from hero, collapse it and allow its tab
     if (activeId && activeId !== this._heroId && !this._heroCollapsed){
       var hero = document.getElementById(this._heroId);
       if (hero){
-        hero.style.display = "none"; // hide intro once About is active
+        hero.style.display = "none";
         this._heroCollapsed = true;
-        this._visited.add(this._heroId);  // allow Intro tab to appear
         this._renderTabsVisibility();
       }
     }
   };
 
+  // 🔑 Only show tabs up to (and including) the active index.
   TabBarController.prototype._renderTabsVisibility = function(){
-    var self = this;
+    var activeIdx = this._order.indexOf(this._active);
+    if (activeIdx < 0) activeIdx = 0;
+
     for (var i=0; i<this._order.length; i++){
       var id = this._order[i];
       var t = this._tabs.get(id);
       if (!t) continue;
 
-      var show =
-        id === self._active ||                             // always show active
-        (id === self._heroId && self._heroCollapsed) ||    // show Intro after collapse
-        self._visited.has(id);                             // show anything we've visited
+      // Hide the hero tab until we've actually collapsed the hero section
+      if (id === this._heroId && !this._heroCollapsed){
+        t.style.display = "none";
+        continue;
+      }
 
+      var show = i <= activeIdx;  // progressive reveal
       t.style.display = show ? "inline-block" : "none";
     }
   };
@@ -171,7 +161,6 @@
   TabBarController.prototype.setActive = function(id){
     if (!this._tabs.size) return;
 
-    // classes + ARIA
     if (this._active && this._tabs.has(this._active)){
       var prev = this._tabs.get(this._active);
       prev.classList.remove("Tab--Active");
@@ -184,7 +173,6 @@
       cur.setAttribute("aria-selected","true");
     }
 
-    // mark all tabs up to active as "past", others normal
     var seenActive = false;
     for (var i=0; i<this._order.length; i++){
       var cid = this._order[i];
@@ -201,13 +189,12 @@
       }
     }
 
-    // Ensure visibility reflects current state
     this._renderTabsVisibility();
   };
 
   // Boot
   function init(){
-    if (window.TabBar && window.TabBar._elBar) return; // already initialized
+    if (window.TabBar && window.TabBar._elBar) return;
     window.TabBar = new TabBarController();
   }
 
