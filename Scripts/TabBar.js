@@ -137,27 +137,38 @@
       hero.style.display = "none";
       this._heroCollapsed = true;
 
-      // ----- SNAP SCROLL UNDER TAB BAR + MOMENTUM GUARD -----
+      // Snap the current active drawer's title under the 56px tab bar
       var active = document.getElementById(activeId);
       if (active){
         var title = active.querySelector("[data-drawer-summary]") || active;
         var tabBarH = 56; // keep in sync with CSS
         var targetY = title.getBoundingClientRect().top + window.pageYOffset - tabBarH;
 
-        // Cancel momentum & settle the page exactly under the bar
+        // Cancel momentum and place exactly
         window.scrollTo({ top: targetY, behavior: "auto" });
         requestAnimationFrame(function(){
           window.scrollTo({ top: targetY, behavior: "auto" });
         });
       }
 
-      // Tell Drawers controller to ignore IO briefly so other drawers don't trigger
-      if (window.DrawersController && typeof window.DrawersController._now === "function"){
-        window.DrawersController._suppressIOUntil =
-          window.DrawersController._now() + 400; // small debounce window
+      // Debounce IO + block user scroll during settle
+      if (window.DrawersController){
+        // Keep old suppression for safety
+        if (typeof window.DrawersController._now === "function"){
+          window.DrawersController._suppressIOUntil =
+            window.DrawersController._now() + 500;
+        }
+        // Hard freeze input so other drawers won't auto-open
+        if (typeof window.DrawersController.FreezeInput === "function"){
+          window.DrawersController.FreezeInput(600); // block wheel/touch/key briefly
+        }
+        if (typeof window.DrawersController.ResetAccumulatedInput === "function"){
+          window.DrawersController.ResetAccumulatedInput();
+        }
       }
 
-      this._renderTabsVisibility(); // let Intro tab appear now that hero collapsed
+      // Ensure Intro tab appears now that hero is collapsed
+      this._renderTabsVisibility && this._renderTabsVisibility();
     }
   }
 };
