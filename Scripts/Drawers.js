@@ -60,7 +60,7 @@
   DrawerController.prototype._snapActiveUnderTabsDeferred = function(drawer){
     var self = this;
     var tries = 0;
-    var maxTries = 24; // ~24 rAFs ≈ 350–400ms
+    var maxTries = 24; // ~350–400ms
 
     function ready(){
       var el = self._tabBarEl();
@@ -100,7 +100,7 @@
     for (var j = 0; j < this._drawers.length; j++) {
       var d = this._drawers[j];
       d.classList.remove("Drawer--Open", "Drawer--NoTail");
-      d.style.display = ""; // keep all visible in flow (only hero may later hide)
+      d.style.display = ""; // keep all visible in flow
       var c = d.querySelector("[data-drawer-content]");
       if (c) c.style.height = "";
     }
@@ -142,7 +142,7 @@
     if (drawer.classList.contains("Drawer--Open")) {
       this.CloseAndLock(drawer);
     } else {
-      drawer.style.display = ""; // ensure visible (if hero was hidden previously)
+      drawer.style.display = ""; // ensure visible
 
       this.OpenDrawer(drawer);
 
@@ -164,6 +164,7 @@
 
   // ---------- Programmatic open/close ----------
 
+  // Wait for a drawer's height transition to end (with fallback timer)
   function waitForHeightTransition(drawer, fallbackMs){
     return new Promise(function(resolve){
       var content = drawer && drawer.querySelector && drawer.querySelector("[data-drawer-content]");
@@ -239,11 +240,10 @@
       // Fast-path: if there's nothing to animate, finish immediately (prevents lock)
       if (Math.abs(endHeight - startHeight) < 0.5) {
         content.style.transition = "";
-        // keep clamp-driven drawers on CSS height; others can be auto
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
-          content.style.height = "";   // let CSS clamp win
+          content.style.height = "";
         } else {
           content.style.height = "auto";
         }
@@ -311,7 +311,7 @@
       }
 
       if (hideHeroOnly && d.id === heroId) {
-        // Hero will be hidden after its transition in OpenThenCloseAndScroll to avoid jank
+        // Hero will be hidden by the caller when appropriate
         continue;
       } else if (hideHeroOnly) {
         // Keep all other drawers in the document flow (visible but collapsed)
@@ -345,8 +345,6 @@
 
       element.style.transition = "";
 
-      // For fixed-video drawers, clear inline height so CSS clamp applies.
-      // For regular content, 'auto' is fine.
       var drawer = element.closest && element.closest(".Drawer");
       var useCssClamp = drawer &&
                         (drawer.classList.contains("Drawer--FixedHero") ||
@@ -361,7 +359,6 @@
 
       self._isAnimating = false;
 
-      // drain queued actions
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           self._drainQueue();
@@ -399,14 +396,12 @@
           drawer.classList.remove("Drawer--NoTail");
         }
 
-        // Match AnimateHeight behavior:
-        // fixed-video drawers rely on CSS clamp; others can use 'auto'
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
-          content.style.height = "";      // let CSS rule control height
+          content.style.height = "";
         } else {
-          content.style.height = "auto";  // normal content
+          content.style.height = "auto";
         }
 
       } else {
@@ -545,12 +540,32 @@
           // hide hero after its own transition completes
           closeEl.style.display = "none";
         }
+
+        // Open the target
         self.OpenById(openId);
+
+        // --- FORCE TABBAR VISIBILITY + SNAP (first non-hero open) ---
+        var target = document.getElementById(openId);
+        var tabBar = self._tabBarEl();
+        if (tabBar && !document.body.classList.contains("Tabs--Visible")) {
+          document.body.classList.add("Tabs--Visible");
+          tabBar.setAttribute("aria-hidden","false");
+        }
+
+        // Do a deferred snap once TabBar is measurable
+        self._snapActiveUnderTabsDeferred(target);
+
+        // And a tiny follow-up snap a couple rAFs later (belt & suspenders)
+        requestAnimationFrame(function(){
+          requestAnimationFrame(function(){
+            self._snapActiveUnderTabsDeferred(target);
+          });
+        });
       });
       return;
     }
 
-    // Otherwise just open target
+    // Otherwise just open target (and defer snap)
     this.OpenById(openId);
   };
 
