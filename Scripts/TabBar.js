@@ -8,6 +8,7 @@
     this._order   = [];        // drawer id order
     this._heroId  = null;      // first (hero) drawer id
     this._active  = null;
+    this._heroCollapsed = false; // NEW: track whether Intro has collapsed
 
     if (!this._elBar || !this._track) return;
 
@@ -15,7 +16,7 @@
     this._wire();
     // Ensure correct initial visibility (in case Intro is already open)
     this._applyVisibility(this._active);
-  }
+}
 
   TabBarController.prototype._buildFromDrawers = function(){
     // Clear any existing tabs if script re-inits
@@ -119,11 +120,24 @@
     return best || this._active;
   };
 
-  TabBarController.prototype._applyVisibility = function(activeId){
+    TabBarController.prototype._applyVisibility = function(activeId){
     var shouldShow = !!activeId && activeId !== this._heroId;
+
+    // toggle body class for styling
     document.body.classList.toggle("Tabs--Visible", shouldShow);
+
+    // toggle aria-hidden on bar
     if (this._elBar){
       this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
+    }
+
+    // special collapse rule for the hero drawer
+    if (activeId && activeId !== this._heroId && !this._heroCollapsed){
+      var hero = document.getElementById(this._heroId);
+      if (hero){
+        hero.style.display = "none"; // hide intro once About is active
+        this._heroCollapsed = true;
+      }
     }
   };
 
@@ -152,6 +166,10 @@
       if (!seenActive){
         t.classList.add("Tab--Past");
       }
+            // Keep Intro tab hidden until we actually collapse the hero
+if (cid === this._heroId){
+  t.style.display = this._heroCollapsed ? "inline-block" : "none";
+}
       if (cid === id){
         seenActive = true;
         t.classList.remove("Tab--Past");
