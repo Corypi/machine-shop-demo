@@ -8,13 +8,13 @@
     this._order   = [];        // drawer id order
     this._heroId  = null;      // first (hero) drawer id
     this._active  = null;
-    this._heroCollapsed = false; // track whether Intro has collapsed
+    this._heroCollapsed = false;
 
     if (!this._elBar || !this._track) return;
 
     this._buildFromDrawers();
     this._wire();
-    this._applyVisibility(this._active);  // correct initial state
+    this._applyVisibility(this._active);
   }
 
   TabBarController.prototype._buildFromDrawers = function(){
@@ -40,7 +40,7 @@
       tab.setAttribute("data-tab-target", id);
       tab.setAttribute("aria-controls", id);
       tab.textContent = title;
-      tab.style.display = "none"; // hidden until allowed
+      tab.style.display = "none";
       tab.addEventListener("click", this._onTabClick.bind(this));
       this._track.appendChild(tab);
       this._tabs.set(id, tab);
@@ -57,7 +57,7 @@
   TabBarController.prototype._wire = function(){
     var self = this;
 
-    // Update tabs when drawers actually open
+    // Drawers tells us when a drawer opens; we just reflect it.
     document.addEventListener("drawer:opened", function(e){
       if (e && e.detail && e.detail.id){
         self.setActive(e.detail.id);
@@ -66,14 +66,19 @@
       }
     });
 
-    // No anchor-based auto-activation anymore.
+    // Single source of truth: Drawers collapses hero and tells us.
+    document.addEventListener("hero:collapsed", function(){
+      self._heroCollapsed = true;
+      self._renderTabsVisibility();
+      self._applyVisibility(self._active);
+    });
   };
 
   TabBarController.prototype._onTabClick = function(evt){
     var id = evt.currentTarget.getAttribute("data-tab-target");
     if (!id) return;
 
-    this.setActive(id);        // optimistic
+    this.setActive(id);
     this._applyVisibility(id);
     this._renderTabsVisibility();
 
@@ -91,53 +96,14 @@
   TabBarController.prototype._applyVisibility = function(activeId){
     var shouldShow = !!activeId && activeId !== this._heroId;
 
-    // toggle body class for styling
     document.body.classList.toggle("Tabs--Visible", shouldShow);
 
-    // toggle aria-hidden on bar
     if (this._elBar){
       this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
     }
 
-    // On first leave from hero, collapse it and snap the active drawer under the bar
-    if (activeId && activeId !== this._heroId && !this._heroCollapsed){
-      var hero = document.getElementById(this._heroId);
-      if (hero){
-        hero.style.display = "none";
-        this._heroCollapsed = true;
-
-        // Snap the current active drawer's title under the 56px tab bar
-        var active = document.getElementById(activeId);
-        if (active){
-          var title = active.querySelector("[data-drawer-summary]") || active;
-          var tabBarH = 56; // keep in sync with CSS
-          var targetY = title.getBoundingClientRect().top + window.pageYOffset - tabBarH;
-
-          // Cancel momentum and place exactly
-          window.scrollTo({ top: targetY, behavior: "auto" });
-          requestAnimationFrame(function(){
-            window.scrollTo({ top: targetY, behavior: "auto" });
-          });
-        }
-
-        // Debounce IO + block user scroll during settle
-        if (window.DrawersController){
-          if (typeof window.DrawersController._now === "function"){
-            window.DrawersController._suppressIOUntil =
-              window.DrawersController._now() + 500;
-          }
-          if (typeof window.DrawersController.FreezeInput === "function"){
-            window.DrawersController.FreezeInput(600); // block wheel/touch/key briefly
-          }
-          if (typeof window.DrawersController.ResetAccumulatedInput === "function"){
-            window.DrawersController.ResetAccumulatedInput();
-          }
-        }
-
-        // Ensure Intro tab appears now that hero is collapsed
-        this._renderTabsVisibility && this._renderTabsVisibility();
-      }
-    }
+    // IMPORTANT: we no longer hide the hero here.
+    // Drawers does it and emits 'hero:collapsed'.
   };
 
   // 🔑 Only show tabs up to (and including) the active index.
@@ -150,13 +116,13 @@
       var t = this._tabs.get(id);
       if (!t) continue;
 
-      // Hide the hero tab until we've actually collapsed the hero section
+      // Hide the hero tab until hero is truly collapsed
       if (id === this._heroId && !this._heroCollapsed){
         t.style.display = "none";
         continue;
       }
 
-      var show = i <= activeIdx;  // progressive reveal (now tied ONLY to opened/clicked)
+      var show = i <= activeIdx;
       t.style.display = show ? "inline-block" : "none";
     }
   };
@@ -176,7 +142,6 @@
       cur.setAttribute("aria-selected","true");
     }
 
-    // Past-state cosmetics
     var seenActive = false;
     for (var i=0; i<this._order.length; i++){
       var cid = this._order[i];
