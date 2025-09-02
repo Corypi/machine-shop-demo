@@ -1,3 +1,4 @@
+<script>
 (function(){
   "use strict";
 
@@ -6,12 +7,15 @@
     this._track   = document.getElementById("TabBarTrack");
     this._tabs    = new Map(); // id -> button
     this._order   = [];        // drawer id order
+    this._heroId  = null;      // first (hero) drawer id
     this._active  = null;
 
     if (!this._elBar || !this._track) return;
 
     this._buildFromDrawers();
     this._wire();
+    // Ensure correct initial visibility (in case Intro is already open)
+    this._applyVisibility(this._active);
   }
 
   TabBarController.prototype._buildFromDrawers = function(){
@@ -43,7 +47,10 @@
       this._tabs.set(id, tab);
     }
 
-    // First visible as active on load (Intro will promote itself shortly)
+    // First drawer in document order is treated as the "hero"
+    this._heroId = this._order.length ? this._order[0] : null;
+
+    // Make the first visible as active on load
     if (this._order.length){
       this.setActive(this._order[0]);
     }
@@ -54,17 +61,21 @@
 
     // React when drawers open/close
     document.addEventListener("drawer:opened", function(e){
-      if (e && e.detail && e.detail.id) self.setActive(e.detail.id);
+      if (e && e.detail && e.detail.id){
+        self.setActive(e.detail.id);
+        self._applyVisibility(e.detail.id);
+      }
     });
 
-    // As a safety, track scroll anchor to highlight the nearest drawer when user scrolls manually
+    // Track scroll to keep highlight in sync
     var ticking = false;
     window.addEventListener("scroll", function(){
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(function(){
         ticking = false;
-        self._syncByAnchor();
+        var id = self._syncByAnchor();
+        self._applyVisibility(id);
       });
     }, {passive:true});
   };
@@ -73,7 +84,8 @@
     var id = evt.currentTarget.getAttribute("data-tab-target");
     if (!id) return;
 
-    this.setActive(id); // optimistic UI
+    this.setActive(id);        // optimistic UI
+    this._applyVisibility(id); // ensure bar shows/hides appropriately
 
     if (window.DrawersController && typeof window.DrawersController.OpenThenCloseAndScroll === "function"){
       window.DrawersController.OpenThenCloseAndScroll(id, ""); // controller enforces only-one-open
@@ -88,7 +100,7 @@
 
   TabBarController.prototype._syncByAnchor = function(){
     var vh = window.innerHeight || document.documentElement.clientHeight;
-    var anchorY = vh * 0.35; // match your ViewportAnchorFraction
+    var anchorY = vh * 0.35; // match ViewportAnchorFraction
     var best = null, bestDist = Infinity;
 
     for (var i=0; i<this._order.length; i++){
@@ -104,6 +116,15 @@
     }
     if (best && best !== this._active){
       this.setActive(best);
+    }
+    return best || this._active;
+  };
+
+  TabBarController.prototype._applyVisibility = function(activeId){
+    var shouldShow = !!activeId && activeId !== this._heroId;
+    document.body.classList.toggle("Tabs--Visible", shouldShow);
+    if (this._elBar){
+      this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
     }
   };
 
@@ -135,7 +156,7 @@
       if (cid === id){
         seenActive = true;
         t.classList.remove("Tab--Past");
-      }else if (seenActive){
+      } else if (seenActive){
         t.classList.remove("Tab--Past");
       }
     }
@@ -143,8 +164,7 @@
 
   // Boot
   function init(){
-    // Avoid re-initializing if already present
-    if (window.TabBar && window.TabBar._elBar) return;
+    if (window.TabBar && window.TabBar._elBar) return; // already initialized
     window.TabBar = new TabBarController();
   }
 
@@ -155,3 +175,4 @@
   }
 
 })();
+</script>
