@@ -16,7 +16,7 @@
   // Suppress IO reactions briefly during boot/programmatic open
   var SuppressIOAfterBootMs = 400;
 
-  // Percent slice around our line (offset enforced with a geometry guard)
+  // Percent slice around our line (geometry guard enforces offset)
   function computeRootMargin() {
     var topPct = -(ViewportAnchorFraction * 100);
     var botPct = -(100 - ViewportAnchorFraction * 100);
@@ -40,6 +40,20 @@
     // Boot/IO suppression
     this._booting = true;
     this._suppressIOUntil = 0;
+
+    // ---- Single-flight queue (one animation at a time) ----
+    this._queue = [];
+    this._enqueue = function (fn) {
+      if (typeof fn === "function") this._queue.push(fn);
+    };
+    this._drainQueue = function () {
+      if (this._isAnimating) return;
+      while (this._queue.length) {
+        var fn = this._queue.shift();
+        try { fn(); } catch (e) {}
+        if (this._isAnimating) break; // stop if the action kicked a new animation
+      }
+    };
 
     this._now = function () {
       return (window.performance && performance.now) ? performance.now() : Date.now();
@@ -66,10 +80,28 @@
       this._summaries[i].addEventListener("keydown", this.OnSummaryKeyDown.bind(this));
     }
 
+    // NEW: install close-markers so we can react when scrolling upward
+    this._InstallCloseMarkers();
+
     this.SyncAria();
     this.SyncHeights();
 
     if (AutoOpenOnScroll) this.EnableScrollAutoToggle();
+  };
+
+  // Add a tiny sentinel at the end of each drawer content
+  DrawerController.prototype._InstallCloseMarkers = function () {
+    for (var i = 0; i < this._drawers.length; i++) {
+      var d = this._drawers[i];
+      var content = d.querySelector("[data-drawer-content]");
+      if (!content) continue;
+      if (!content.querySelector("[data-close-marker]")) {
+        var marker = document.createElement("div");
+        marker.setAttribute("data-close-marker", "");
+        marker.style.cssText = "position:relative;height:1px;width:1px;pointer-events:none;";
+        content.appendChild(marker);
+      }
+    }
   };
 
   // ---------- Interaction ----------
@@ -83,7 +115,15 @@
   };
 
   DrawerController.prototype.OnToggleRequested = function (evt) {
-    if (this._isAnimating) return;
+    // Queue user clicks if an animation is active
+    if (this._isAnimating) {
+      var self = this, target = evt.currentTarget;
+      this._enqueue(function () {
+        self.OnToggleRequested({ currentTarget: target, key: "queued" });
+      });
+      return;
+    }
+
     var summary = evt.currentTarget;
     var drawer = summary.closest ? summary.closest("[data-drawer]") : this._FindAncestorDrawer(summary);
     if (!drawer) return;
@@ -92,11 +132,18 @@
       this.CloseAndLock(drawer);
     } else {
       this.OpenDrawer(drawer);
-
-      // 🛡️ Suppress IO briefly so the open-induced layout shift doesn't auto-open the next drawer
+      // suppress IO briefly so the open-induced layout shift doesn't auto-open the next drawer
       this._suppressIOUntil = this._now() + 450;
 
-      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
+      if (OnlyOneOpenAtATime) {
+        var self2 = this;
+        // Queue sibling closes if an animation will run
+        if (this._isAnimating) {
+          this._enqueue(function(){ self2.CloseSiblings(drawer); });
+        } else {
+          this.CloseSiblings(drawer);
+        }
+      }
     }
   };
 
@@ -143,12 +190,14 @@
       return Math.max(0, Math.round(end));
     }
 
+    // Run after layout applies the open class
     requestAnimationFrame(function () {
       var endHeight = measureEndHeight();
 
       // Fast-path: if there's nothing to animate, finish immediately (prevents lock)
       if (Math.abs(endHeight - startHeight) < 0.5) {
         content.style.transition = "";
+        // keep clamp-driven drawers on CSS height; others can be auto
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
@@ -157,6 +206,7 @@
           content.style.height = "auto";
         }
         self._isAnimating = false;
+        self._drainQueue();
         return;
       }
 
@@ -184,10 +234,12 @@
     }
 
     var endHeight = 0;
+    // If nothing to animate, finish immediately
     if (Math.abs(endHeight - startHeight) < 0.5) {
       content.style.transition = "";
       content.style.height = "";
       this._isAnimating = false;
+      this._drainQueue();
       return;
     }
 
@@ -213,11 +265,13 @@
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
     var self = this;
 
+    // pin the 35% line (so the page doesn't "shoot")
     var vh = window.innerHeight || document.documentElement.clientHeight;
     var anchorDocYBefore = (window.pageYOffset || document.documentElement.scrollTop || 0)
                          + vh * ViewportAnchorFraction + OpenOffsetPx;
 
     if (this._isAnimating) {
+      // snap any in-flight to end state to avoid lock
       element.style.transition = "";
       element.style.height = endHeight > 0 ? (endHeight + "px") : "";
     }
@@ -236,6 +290,8 @@
 
       element.style.transition = "";
 
+      // For fixed-video drawers, clear inline height so CSS clamp applies.
+      // For regular content, 'auto' is fine.
       var drawer = element.closest && element.closest(".Drawer");
       var useCssClamp = drawer &&
                         (drawer.classList.contains("Drawer--FixedHero") ||
@@ -250,6 +306,7 @@
 
       self._isAnimating = false;
 
+      // restore the 35%+offset line after layout settles, then drain queued actions
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           var anchorDocYAfter =
@@ -259,6 +316,8 @@
 
           var delta = anchorDocYAfter - anchorDocYBefore;
           if (Math.abs(delta) > 0.5) window.scrollBy(0, -delta);
+
+          self._drainQueue(); // ✅ run whatever was queued
         });
       });
     }
@@ -293,13 +352,16 @@
           drawer.classList.remove("Drawer--NoTail");
         }
 
+        // Match AnimateHeight behavior:
+        // fixed-video drawers rely on CSS clamp; others can use 'auto'
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
             content.classList.contains("DrawerContent--Fill")) {
-          content.style.height = ""; 
+          content.style.height = "";      // let CSS rule control height
         } else {
-          content.style.height = "auto";
+          content.style.height = "auto";  // normal content
         }
+
       } else {
         drawer.classList.remove("Drawer--NoTail");
         content.style.height = "";
@@ -307,6 +369,7 @@
     }
   };
 
+  // Keep an open drawer healthy if media sizes late
   DrawerController.prototype._wireMediaAutoGrow = function (content) {
     var medias = content.querySelectorAll("video, img, iframe");
     function maybeSync() {
@@ -326,7 +389,7 @@
     }
   };
 
-  // --- Auto-advance video drawers ---
+  // --- Auto-advance video drawers (safe: only if playback truly started) ---
   DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
     var drawer = document.getElementById(drawerId);
     if (!drawer) return;
@@ -363,7 +426,7 @@
     }, { passive:true });
   };
 
-  // ---------- Auto open on scroll ----------
+  // ---------- Auto open on scroll (bidirectional) ----------
   DrawerController.prototype.EnableScrollAutoToggle = function () {
     var self = this;
 
@@ -375,8 +438,13 @@
       rootMargin: computeRootMargin()
     });
 
-    for (var i = 0; i < this._summaries.length; i++) {
-      this._observer.observe(this._summaries[i]);
+    // Observe titles (downward open) and close-markers (upward open)
+    for (var i = 0; i < this._drawers.length; i++) {
+      var d = this._drawers[i];
+      var summary = d.querySelector("[data-drawer-summary]");
+      var marker  = d.querySelector("[data-close-marker]");
+      if (summary) this._observer.observe(summary);
+      if (marker)  this._observer.observe(marker);
     }
 
     function onScroll() {
@@ -392,30 +460,60 @@
     var now = this._now();
     if (this._booting || now < this._suppressIOUntil) return;
 
+    // HARD MUTEX: if we're animating, ignore IO entirely
+    if (this._isAnimating) return;
+
+    // chronological
     entries.sort(function (a, b) { return a.time - b.time; });
+
+    var anchorY = (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction + OpenOffsetPx;
 
     for (var idx = 0; idx < entries.length; idx++) {
       var entry = entries[idx];
-      if (!entry.isIntersecting) continue;
-      if (this._scrollDirection !== 1) continue;
+      if (!entry.isIntersecting) continue; // entering the slice only
 
-      var summary = entry.target;
-      if (!summary.hasAttribute("data-drawer-summary")) continue;
-
-      var drawer = summary.closest("[data-drawer]");
+      var target = entry.target;
+      var drawer = target.closest && target.closest("[data-drawer]");
       if (!drawer) continue;
-
-      var rect = summary.getBoundingClientRect();
-      var anchorY = (window.innerHeight || document.documentElement.clientHeight) * ViewportAnchorFraction + OpenOffsetPx;
-      if (rect.top > anchorY) continue;
 
       var lockedUntil = parseFloat(drawer.dataset.lockedUntil || "0");
       if (lockedUntil > now) continue;
 
-      if (!drawer.classList.contains("Drawer--Open")) {
-        this.OpenDrawer(drawer);
-        if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
-        this._suppressIOUntil = this._now() + 150;
+      var rectTop = target.getBoundingClientRect().top;
+
+      if (this._scrollDirection === 1) {
+        // DOWNWARD: open when the title crosses the anchor (below threshold)
+        if (target.hasAttribute("data-drawer-summary")) {
+          if (rectTop <= anchorY && !drawer.classList.contains("Drawer--Open")) {
+            this.OpenDrawer(drawer);
+            if (OnlyOneOpenAtATime) {
+              var selfSib = this;
+              if (this._isAnimating) {
+                this._enqueue(function(){ selfSib.CloseSiblings(drawer); });
+              } else {
+                this.CloseSiblings(drawer);
+              }
+            }
+            // brief suppression so the open-induced layout shift doesn't chain-trigger
+            this._suppressIOUntil = this._now() + 150;
+          }
+        }
+      } else if (this._scrollDirection === -1) {
+        // UPWARD: open when the close-marker crosses the anchor from below
+        if (target.hasAttribute("data-close-marker")) {
+          if (rectTop >= anchorY && !drawer.classList.contains("Drawer--Open")) {
+            this.OpenDrawer(drawer);
+            if (OnlyOneOpenAtATime) {
+              var selfSib2 = this;
+              if (this._isAnimating) {
+                this._enqueue(function(){ selfSib2.CloseSiblings(drawer); });
+              } else {
+                this.CloseSiblings(drawer);
+              }
+            }
+            this._suppressIOUntil = this._now() + 150;
+          }
+        }
       }
     }
   };
@@ -429,13 +527,29 @@
   };
 
   // ---------- Public helpers ----------
+
   DrawerController.prototype.OpenById = function (id) {
+    // Queue programmatic opens during animation
+    if (this._isAnimating) {
+      var self = this;
+      this._enqueue(function(){ self.OpenById(id); });
+      return;
+    }
+
     var drawer = document.getElementById(id);
     if (!drawer) return;
     if (!drawer.classList.contains("Drawer--Open")) {
       this.OpenDrawer(drawer);
+      // Suppress IO to avoid chain-opening via layout shift
       this._suppressIOUntil = this._now() + 450;
-      if (OnlyOneOpenAtATime) this.CloseSiblings(drawer);
+      if (OnlyOneOpenAtATime) {
+        var self2 = this;
+        if (this._isAnimating) {
+          this._enqueue(function(){ self2.CloseSiblings(drawer); });
+        } else {
+          this.CloseSiblings(drawer);
+        }
+      }
     }
   };
 
@@ -460,12 +574,14 @@
   };
 
   // ---------- Boot ----------
+
   function InitializeDrawersWhenReady() {
     document.documentElement.style.setProperty(
       "--ViewportAnchorTriggerLinePositionVh",
       (ViewportAnchorFraction * 100) + "vh"
     );
 
+    // visual guide line (optional)
     var guide = document.createElement("div");
     guide.className = "TriggerLine";
     document.body.appendChild(guide);
@@ -473,11 +589,14 @@
     var instance = new DrawerController(document);
     window.DrawersController = instance;
 
+    // Open Intro once layout settles (and keep IO quiet while we do it)
     function openIntro() {
       var intro = document.getElementById("Intro");
       if (!intro) { instance._booting = false; return; }
 
+      // Safe auto-advance: Intro -> About
       instance._wireAutoAdvanceVideo("Intro", "About");
+      // instance._wireAutoAdvanceVideo("Tour", "Capabilities");
 
       instance._suppressIOUntil = instance._now() + SuppressIOAfterBootMs;
       instance.OpenById("Intro");
@@ -500,3 +619,9 @@
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", InitializeDrawersWhenReady);
+  } else {
+    InitializeDrawersWhenReady();
+  }
+
+  window.DrawerController = DrawerController;
+})();
