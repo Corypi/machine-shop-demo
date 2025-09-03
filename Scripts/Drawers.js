@@ -627,106 +627,105 @@
     }
   };
 
-  // --- Optional: auto-advance a video drawer ---
   // --- Auto-advance a video drawer, with optional soft-trim cutoff ---
-DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId, options) {
-  var cutoffSeconds = options && typeof options.cutoffSeconds === "number" ? Math.max(0, options.cutoffSeconds) : null;
+  DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId, options) {
+    var cutoffSeconds = options && typeof options.cutoffSeconds === "number" ? Math.max(0, options.cutoffSeconds) : null;
 
-  var drawer = document.getElementById(drawerId);
-  if (!drawer) return;
-  var content = drawer.querySelector("[data-drawer-content]");
-  var video   = content ? content.querySelector("video") : null;
-  if (!video) return;
+    var drawer = document.getElementById(drawerId);
+    if (!drawer) return;
+    var content = drawer.querySelector("[data-drawer-content]");
+    var video   = content ? content.querySelector("video") : null;
+    if (!video) return;
 
-  var self = this;
-  var started = false;
-  var cleaned = false;
+    var self = this;
+    var started = false;
+    var cleaned = false;
 
-  function tryPlay() {
-    try {
-      video.muted = true;
-      video.playsInline = true;
-      var p = video.play();
-      if (p && typeof p.catch === "function") p.catch(function(){});
-    } catch(e) {}
-  }
-
-  function cleanup() {
-    if (cleaned) return;
-    cleaned = true;
-    video.removeEventListener("playing", onPlaying);
-    video.removeEventListener("loadedmetadata", onLoadedMeta);
-    video.removeEventListener("timeupdate", onTimeUpdate);
-    video.removeEventListener("ended", onEnded);
-  }
-
-function advanceIfVisible() {
-  if (!drawer.classList.contains("Drawer--Open")) return;
-  cleanup();
-
-  // Flag the specific auto-advance path Intro -> Tour
-  if (drawerId === "Intro" && nextId === "Tour") {
-    window.NavCtx.arrivedTourFromIntroAuto = true;
-  }
-
-  if (nextId) {
-    self.OpenThenCloseAndScroll(nextId, drawerId);
-  } else {
-    self.CloseAndLock(drawer);
-  }
-}
-
-  function onPlaying(){ started = true; }
-  function onLoadedMeta(){
-    // If we have a cutoff beyond the actual duration, clamp it
-    if (cutoffSeconds != null && isFinite(video.duration) && video.duration > 0) {
-      cutoffSeconds = Math.min(cutoffSeconds, video.duration);
+    function tryPlay() {
+      try {
+        video.muted = true;
+        video.playsInline = true;
+        var p = video.play();
+        if (p && typeof p.catch === "function") p.catch(function(){});
+      } catch(e) {}
     }
-    tryPlay();
-  }
 
-  function onTimeUpdate(){
-    if (cutoffSeconds == null) return;
-    if (video.currentTime >= cutoffSeconds) {
-      try { video.pause(); } catch(_) {}
-      advanceIfVisible();
+    function cleanup() {
+      if (cleaned) return;
+      cleaned = true;
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("loadedmetadata", onLoadedMeta);
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("ended", onEnded);
     }
-  }
 
-  function onEnded(){
-    if (!started) return;
-    // If we didn’t soft-trim, use the natural ended event
-    if (cutoffSeconds == null) {
-      advanceIfVisible();
+    function advanceIfVisible() {
+      if (!drawer.classList.contains("Drawer--Open")) return;
+      cleanup();
+
+      // Flag the specific auto-advance path Intro -> Tour (guarded for safety)
+      if (drawerId === "Intro" && nextId === "Tour" && window.NavCtx) {
+        window.NavCtx.arrivedTourFromIntroAuto = true;
+      }
+
+      if (nextId) {
+        self.OpenThenCloseAndScroll(nextId, drawerId);
+      } else {
+        self.CloseAndLock(drawer);
+      }
     }
-  }
 
-  video.addEventListener("playing", onPlaying, { passive:true });
-  video.addEventListener("loadedmetadata", onLoadedMeta, { passive:true });
-  video.addEventListener("timeupdate", onTimeUpdate, { passive:true });
-  video.addEventListener("ended", onEnded, { passive:true });
+    function onPlaying(){ started = true; }
+    function onLoadedMeta(){
+      // If we have a cutoff beyond the actual duration, clamp it
+      if (cutoffSeconds != null && isFinite(video.duration) && video.duration > 0) {
+        cutoffSeconds = Math.min(cutoffSeconds, video.duration);
+      }
+      tryPlay();
+    }
 
-  // Kick things off in case metadata is already available
-  if (video.readyState >= 1) { onLoadedMeta(); } else { tryPlay(); }
-};
+    function onTimeUpdate(){
+      if (cutoffSeconds == null) return;
+      if (video.currentTime >= cutoffSeconds) {
+        try { video.pause(); } catch(_) {}
+        advanceIfVisible();
+      }
+    }
+
+    function onEnded(){
+      if (!started) return;
+      // If we didn’t soft-trim, use the natural ended event
+      if (cutoffSeconds == null) {
+        advanceIfVisible();
+      }
+    }
+
+    video.addEventListener("playing", onPlaying, { passive:true });
+    video.addEventListener("loadedmetadata", onLoadedMeta, { passive:true });
+    video.addEventListener("timeupdate", onTimeUpdate, { passive:true });
+    video.addEventListener("ended", onEnded, { passive:true });
+
+    // Kick things off in case metadata is already available
+    if (video.readyState >= 1) { onLoadedMeta(); } else { tryPlay(); }
+  };
 
   // ---------- Public helpers ----------
 
-function PrimeMarkedVideos(){
-  var vids = document.querySelectorAll('video[data-prime="true"]');
-  for (var i = 0; i < vids.length; i++){
-    var v = vids[i];
-    try {
-      // Make sure policies are friendly to preloading
-      v.muted = true;
-      v.playsInline = true;
-      // Ensure eager behavior is active
-      v.preload = "auto";
-      // Kick the network pipeline
-      v.load();
-    } catch(_) {}
+  function PrimeMarkedVideos(){
+    var vids = document.querySelectorAll('video[data-prime="true"]');
+    for (var i = 0; i < vids.length; i++){
+      var v = vids[i];
+      try {
+        // Make sure policies are friendly to preloading
+        v.muted = true;
+        v.playsInline = true;
+        // Ensure eager behavior is active
+        v.preload = "auto";
+        // Kick the network pipeline
+        v.load();
+      } catch(_) {}
+    }
   }
-}
 
   DrawerController.prototype._FindAncestorDrawer = function (node) {
     while (node && node !== document) {
@@ -834,97 +833,14 @@ function PrimeMarkedVideos(){
 
   // ---------- Boot ----------
 
-(function () {
-  "use strict";
-
-  // ... (everything above stays the same) ...
-
-  // --- Auto-advance a video drawer, with optional soft-trim cutoff ---
-  DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId, options) {
-    var cutoffSeconds = options && typeof options.cutoffSeconds === "number" ? Math.max(0, options.cutoffSeconds) : null;
-
-    var drawer = document.getElementById(drawerId);
-    if (!drawer) { return; }
-    var content = drawer.querySelector("[data-drawer-content]");
-    var video   = content ? content.querySelector("video") : null;
-    if (!video) { return; }
-
-    var self = this;
-    var started = false;
-    var cleaned = false;
-
-    function tryPlay() {
-      try {
-        video.muted = true;
-        video.playsInline = true;
-        var p = video.play();
-        if (p && typeof p.catch === "function") { p.catch(function(){}); }
-      } catch(e) {}
-    }
-
-    function cleanup() {
-      if (cleaned) { return; }
-      cleaned = true;
-      video.removeEventListener("playing", onPlaying);
-      video.removeEventListener("loadedmetadata", onLoadedMeta);
-      video.removeEventListener("timeupdate", onTimeUpdate);
-      video.removeEventListener("ended", onEnded);
-    }
-
-    function advanceIfVisible() {
-      if (!drawer.classList.contains("Drawer--Open")) { return; }
-      cleanup();
-
-      // ⬅ set context when Intro auto-advances to Tour
-      if (drawerId === "Intro" && nextId === "Tour" && window.NavCtx) {
-        window.NavCtx.arrivedTourFromIntroAuto = true;
-      }
-
-      if (nextId) {
-        self.OpenThenCloseAndScroll(nextId, drawerId);
-      } else {
-        self.CloseAndLock(drawer);
-      }
-    }
-
-    function onPlaying(){ started = true; }
-    function onLoadedMeta(){
-      if (cutoffSeconds != null && isFinite(video.duration) && video.duration > 0) {
-        cutoffSeconds = Math.min(cutoffSeconds, video.duration);
-      }
-      tryPlay();
-    }
-    function onTimeUpdate(){
-      if (cutoffSeconds == null) { return; }
-      if (video.currentTime >= cutoffSeconds) {
-        try { video.pause(); } catch(_) {}
-        advanceIfVisible();
-      }
-    }
-    function onEnded(){
-      if (!started) { return; }
-      if (cutoffSeconds == null) { advanceIfVisible(); }
-    }
-
-    video.addEventListener("playing", onPlaying, { passive:true });
-    video.addEventListener("loadedmetadata", onLoadedMeta, { passive:true });
-    video.addEventListener("timeupdate", onTimeUpdate, { passive:true });
-    video.addEventListener("ended", onEnded, { passive:true });
-
-    // Kick in case metadata is already available
-    if (video.readyState >= 1) { onLoadedMeta(); } else { tryPlay(); }
-  };
-
-  // ---------- Boot ----------
-
   function InitializeDrawersWhenReady() {
-    // ===== Nav context flags + helpers (place at top of this function) =====
+    // ===== Nav context flags + helpers (defined BEFORE any listeners use them) =====
     window.NavCtx = {
       skippedIntro: false,                 // set when user taps "Skip Intro"
       arrivedTourFromIntroAuto: false      // set when Intro auto-advances to Tour
     };
 
-    // Exposed for the Intro skip button
+    // Exposed for the Intro skip button (optional; inline onclick can still call controller directly)
     window.SkipIntro = function(){
       window.NavCtx.skippedIntro = true;
       if (window.DrawersController){
@@ -953,7 +869,7 @@ function PrimeMarkedVideos(){
     window.DrawersController = instance;
 
     // Optional: prime videos marked for prebuffer (safe to keep, no-op if not used)
-    if (typeof PrimeMarkedVideos === "function") { PrimeMarkedVideos(); }
+    PrimeMarkedVideos();
 
     // Clear the "arrived from Intro auto" tag once we leave Tour
     document.addEventListener("drawer:opened", function(e){
@@ -978,9 +894,7 @@ function PrimeMarkedVideos(){
       instance._wireAutoAdvanceVideo("Intro", "Tour", { cutoffSeconds: 20 });
 
       // Initial autoplay safety pass
-      if (typeof instance._autoplayVideos === "function") {
-        instance._autoplayVideos(intro);
-      }
+      instance._autoplayVideos(intro);
     }
 
     if (document.readyState === "loading") {
