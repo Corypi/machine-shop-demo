@@ -1,13 +1,14 @@
-// Drawers.js (patch)
-// Change: suppress snap on initial page-load Intro open.
-// Also, when OpenThenCloseAndScroll is orchestrating the snap, it tells OpenById not to snap,
-// so we avoid double-snapping. All other interactions keep snapping as before.
+// Drawers.js (final patch)
+// Fix: keep Intro OPEN on page load and autoplay the video, without snapping.
+// We now open the Intro drawer directly and defensively ensure it's visible,
+// instead of relying only on OpenById. All other behaviors remain unchanged.
 
 (function () {
   "use strict";
 
   // ==========================================================
-  // SnapManager (unchanged)
+  // SnapManager
+  // Single, reliable snapping primitive used everywhere.
   // ==========================================================
   var SnapManager = (function(){
     var MaxWaitMs = 500;
@@ -586,10 +587,15 @@
       var intro = document.getElementById("Intro");
       if (!intro) return;
 
-      instance._wireAutoAdvanceVideo("Intro", "About");
+      // DEFENSIVELY ensure Intro is visible and OPEN on first paint
+      intro.removeAttribute("hidden");
+      intro.style.display = "";
+      if (!intro.classList.contains("Drawer--Open")) {
+        // Open directly (no snap on page-load)
+        instance.OpenDrawer(intro);
+      }
 
-      // IMPORTANT: do NOT snap on initial page-load Intro open
-      instance.OpenById("Intro", { snap: false });
+      instance._wireAutoAdvanceVideo("Intro", "About");
 
       var vid = intro.querySelector("video");
       if (vid) {
@@ -602,7 +608,14 @@
       }
     }
 
-    requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
+    // Open Intro ASAP after DOM is ready
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", function(){
+        requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
+      }, { once: true });
+    } else {
+      requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
+    }
   }
 
   if (document.readyState === "loading") {
