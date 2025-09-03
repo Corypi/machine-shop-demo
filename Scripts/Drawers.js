@@ -1,14 +1,14 @@
-// Drawers.js (final patch)
-// Fix: keep Intro OPEN on page load and autoplay the video, without snapping.
-// We now open the Intro drawer directly and defensively ensure it's visible,
-// instead of relying only on OpenById. All other behaviors remain unchanged.
+// Drawers.js — Patch
+// Fix: When skipping Intro on first page-load, "About" sometimes snapped with extra space.
+// Root cause: we were snapping after "drawer:opened" (fired before the open animation settled).
+// Change: emit a reliable "drawer:open-complete" when the drawer is fully laid out,
+// and have OpenThenCloseAndScroll wait for that before performing the snap.
 
 (function () {
   "use strict";
 
   // ==========================================================
-  // SnapManager
-  // Single, reliable snapping primitive used everywhere.
+  // SnapManager (unchanged)
   // ==========================================================
   var SnapManager = (function(){
     var MaxWaitMs = 500;
@@ -106,7 +106,6 @@
   DrawerController.prototype._tabBarEl = function(){ return document.getElementById("TabBar"); };
   DrawerController.prototype._isTabMode = function(){ return document.body.classList.contains("Tabs--Visible"); };
 
-  // In tab mode, hide only drawers BEFORE the active index.
   DrawerController.prototype._applyTabModeVisibility = function(activeId){
     var inTabMode = this._isTabMode();
     if (!inTabMode){
@@ -271,9 +270,14 @@
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
+    // Fire "opened" immediately (state toggled)
     document.dispatchEvent(new CustomEvent("drawer:opened", { detail: { id: drawer.id }}));
 
     var self = this;
+
+    function dispatchOpenComplete(){
+      document.dispatchEvent(new CustomEvent("drawer:open-complete", { detail: { id: drawer.id }}));
+    }
 
     function measureEndHeight() {
       var prevH = content.style.height;
@@ -305,10 +309,11 @@
         }
         self._isAnimating = false;
         self._drainQueue();
+        dispatchOpenComplete(); // ✅ settled with no animation
         return;
       }
 
-      self.AnimateHeight(content, startHeight, endHeight);
+      self.AnimateHeight(content, startHeight, endHeight, dispatchOpenComplete); // pass callback
     });
 
     this._wireMediaAutoGrow(content);
@@ -352,7 +357,6 @@
     drawer.dataset.lockedUntil = String(this._now() + SuppressMsAfterProgrammaticClose);
   };
 
-  // In tab mode, only hide drawers BEFORE the active index.
   DrawerController.prototype.CloseSiblings = function (exceptDrawer, removeHero) {
     var heroId = this._heroId();
     var inTabMode = this._isTabMode();
@@ -385,7 +389,8 @@
 
   // ---------- Animation + ARIA ----------
 
-  DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight) {
+  // AnimateHeight now optionally accepts an onComplete callback for "open-complete".
+  DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight, onComplete) {
     var self = this;
 
     if (this._isAnimating) {
@@ -419,7 +424,10 @@
       self._isAnimating = false;
 
       requestAnimationFrame(function () {
-        requestAnimationFrame(function () { self._drainQueue(); });
+        requestAnimationFrame(function () {
+          self._drainQueue();
+          if (typeof onComplete === "function") { onComplete(); } // ✅ settled after animation
+        });
       });
     }
 
@@ -494,8 +502,7 @@
     return null;
   };
 
-  // UPDATED SIGNATURE: OpenById(id, opts?)
-  // opts.snap: whether to perform a snap after opening (default true)
+  // UPDATED SIGNATURE: OpenById(id, opts?) — opts.snap (default true)
   DrawerController.prototype.OpenById = function (id, opts) {
     var snap = !opts || opts.snap !== false;
 
@@ -546,22 +553,21 @@
     SnapManager.WaitStable(function(){ SnapManager.SnapToTitle(el, "auto"); });
   };
 
-  // When orchestrating open+snap (e.g., from TabBar), we suppress the internal snap in OpenById
-  // and do a single snap after we receive "drawer:opened".
+  // OpenThenCloseAndScroll now waits for "drawer:open-complete" before snapping.
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     var self = this;
     var heroId = this._heroId();
 
     function openAndSnap() {
-      self.OpenById(openId, { snap: false }); // <-- suppress snap here
+      self.OpenById(openId, { snap: false });
 
-      function onOpened(e){
+      function onOpenComplete(e){
         if (!e || !e.detail || e.detail.id !== openId) return;
-        document.removeEventListener("drawer:opened", onOpened);
+        document.removeEventListener("drawer:open-complete", onOpenComplete);
         SnapManager.UpdateTabBarOffsetVar();
         SnapManager.WaitStable(function(){ self.ScrollToDrawer(openId); });
       }
-      document.addEventListener("drawer:opened", onOpened);
+      document.addEventListener("drawer:open-complete", onOpenComplete);
     }
 
     if (closeId && heroId && closeId === heroId) {
@@ -587,13 +593,10 @@
       var intro = document.getElementById("Intro");
       if (!intro) return;
 
-      // DEFENSIVELY ensure Intro is visible and OPEN on first paint
+      // Keep Intro open on first load (no snap) and autoplay video
       intro.removeAttribute("hidden");
       intro.style.display = "";
-      if (!intro.classList.contains("Drawer--Open")) {
-        // Open directly (no snap on page-load)
-        instance.OpenDrawer(intro);
-      }
+      if (!intro.classList.contains("Drawer--Open")) { instance.OpenDrawer(intro); }
 
       instance._wireAutoAdvanceVideo("Intro", "About");
 
@@ -608,7 +611,6 @@
       }
     }
 
-    // Open Intro ASAP after DOM is ready
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", function(){
         requestAnimationFrame(function(){ requestAnimationFrame(openIntro); });
