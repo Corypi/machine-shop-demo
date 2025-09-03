@@ -57,6 +57,14 @@
   TabBarController.prototype._wire = function(){
     var self = this;
 
+document.addEventListener("hero:collapsed", (e) => {
+  this._heroCollapsed = true;
+  // once hero is gone, make sure the bar is visible and tabs re-render
+  document.body.classList.add("Tabs--Visible");
+  if (this._elBar) this._elBar.setAttribute("aria-hidden","false");
+  this._renderTabsVisibility();
+});
+
     // Drawers tells us when a drawer opens; we just reflect it.
     document.addEventListener("drawer:opened", function(e){
       if (e && e.detail && e.detail.id){
