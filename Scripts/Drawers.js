@@ -63,11 +63,46 @@
     }
   };
 
+  // Snap under the TabBar; compute using offsetTop and do a double tick
   DrawerController.prototype._snapUnderTabs = function(drawer){
     if (!drawer) return;
     var title = drawer.querySelector("[data-drawer-summary]") || drawer;
-    var y = title.getBoundingClientRect().top + window.pageYOffset - this._tabBarHeight();
+    var y = title.offsetTop - this._tabBarHeight();
     window.scrollTo({ top: y, behavior: "auto" });
+    requestAnimationFrame(function(){
+      window.scrollTo({ top: y, behavior: "auto" });
+    });
+  };
+
+  // Wait until TabBar is visible and Container padding-top is applied (prevents early snap)
+  DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
+    var self = this, tries = 0, maxTries = 60;
+
+    function ready(){
+      if (!document.body.classList.contains("Tabs--Visible")) return false;
+      var bar = self._tabBarEl();
+      if (!bar) return false;
+      var h = bar.getBoundingClientRect().height || 0;
+      if (h < 1) return false;
+
+      var container = document.querySelector(".Container");
+      if (!container) return true;
+      var pt = parseFloat(getComputedStyle(container).paddingTop) || 0;
+      return pt >= h - 1;
+    }
+
+    (function loop(){
+      if (ready()){
+        void document.body.offsetHeight; // force style tick
+        self._snapUnderTabs(drawer);
+        return;
+      }
+      if (++tries >= maxTries){
+        self._snapUnderTabs(drawer); // best effort
+        return;
+      }
+      requestAnimationFrame(loop);
+    })();
   };
 
   // Instantly remove a drawer from layout (no animation)
@@ -177,9 +212,8 @@
         }
       }
 
-      // snap after the open settles on next frame
-      var self3 = this;
-      requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
+      // snap once TabBar/padding are ready
+      this._snapUnderTabsDeferred(drawer);
     }
   };
 
@@ -260,12 +294,13 @@
     drawer.classList.remove("Drawer--Open");
     drawer.classList.remove("Drawer--NoTail");
     this.SetAriaExpanded(drawer, false);
+
     // If the closed drawer is the hero, collapse it out of flow and show the tab bar
-var heroIdNow = this._heroId();
-if (heroIdNow && drawer.id === heroIdNow) {
-  this._forceRemoveFromFlow(drawer);
-  this._ensureTabBarVisible();
-}
+    var heroIdNow = this._heroId();
+    if (heroIdNow && drawer.id === heroIdNow) {
+      this._forceRemoveFromFlow(drawer);
+      this._ensureTabBarVisible();
+    }
 
     document.dispatchEvent(new CustomEvent("drawer:closed", { detail: { id: drawer.id }}));
 
@@ -292,31 +327,29 @@ if (heroIdNow && drawer.id === heroIdNow) {
   };
 
   DrawerController.prototype.CloseSiblings = function (exceptDrawer, removeHero) {
-  var heroId = this._heroId();
-  for (var i = 0; i < this._drawers.length; i++) {
-    var d = this._drawers[i];
-    if (d === exceptDrawer) continue;
+    var heroId = this._heroId();
+    for (var i = 0; i < this._drawers.length; i++) {
+      var d = this._drawers[i];
+      if (d === exceptDrawer) continue;
 
-    // 1) close any open sibling
-    if (d.classList.contains("Drawer--Open")) {
-      this.CloseDrawer(d);
-    }
-
-    // 2) special-case hero: never re-show it once we’re removing it
-    if (removeHero && heroId && d.id === heroId) {
-      // make sure hero is OUT of flow and stays that way
-      if (d.style.display !== "none" || !d.hasAttribute("hidden")) {
-        this._forceRemoveFromFlow(d);
+      // 1) close any open sibling
+      if (d.classList.contains("Drawer--Open")) {
+        this.CloseDrawer(d);
       }
-      // do NOT fall through to the generic "re-show" branch
-      continue;
-    }
 
-    // 3) all non-hero siblings remain visible in flow
-    d.removeAttribute("hidden");
-    d.style.display = "";
-  }
-};
+      // 2) special-case hero: never re-show it once we’re removing it
+      if (removeHero && heroId && d.id === heroId) {
+        if (d.style.display !== "none" || !d.hasAttribute("hidden")) {
+          this._forceRemoveFromFlow(d);
+        }
+        continue;
+      }
+
+      // 3) all non-hero siblings remain visible in flow
+      d.removeAttribute("hidden");
+      d.style.display = "";
+    }
+  };
 
   // ---------- Animation + ARIA ----------
 
@@ -507,8 +540,8 @@ if (heroIdNow && drawer.id === heroIdNow) {
       }
     }
 
-    var self3 = this;
-    requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
+    // wait for TabBar readiness then snap
+    this._snapUnderTabsDeferred(drawer);
   };
 
   DrawerController.prototype.CloseById = function (id) {
@@ -520,9 +553,7 @@ if (heroIdNow && drawer.id === heroIdNow) {
   DrawerController.prototype.ScrollToDrawer = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
-    var title = drawer.querySelector("[data-drawer-summary]") || drawer;
-    var y = title.getBoundingClientRect().top + window.pageYOffset - this._tabBarHeight();
-    window.scrollTo({ top: y, behavior: "auto" });
+    this._snapUnderTabsDeferred(drawer);
   };
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
@@ -536,16 +567,12 @@ if (heroIdNow && drawer.id === heroIdNow) {
       }
       this._ensureTabBarVisible();
 
-      // 2) Next frame: open target
+      // 2) Next frame: open target and snap (with readiness)
       var self = this;
       requestAnimationFrame(function(){
         self.OpenById(openId);
-
-        // 3) Next frame: snap under bar (after open/layout settles)
-        requestAnimationFrame(function(){
-          var target = document.getElementById(openId);
-          self._snapUnderTabs(target);
-        });
+        var target = document.getElementById(openId);
+        self._snapUnderTabsDeferred(target);
       });
       return;
     }
@@ -553,11 +580,8 @@ if (heroIdNow && drawer.id === heroIdNow) {
     // Non-hero path
     if (closeId) this.CloseById(closeId);
     this.OpenById(openId);
-    var self2 = this;
-    requestAnimationFrame(function(){
-      var t2 = document.getElementById(openId);
-      self2._snapUnderTabs(t2);
-    });
+    var t2 = document.getElementById(openId);
+    this._snapUnderTabsDeferred(t2);
   };
 
   // ---------- Boot ----------
