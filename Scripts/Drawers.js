@@ -804,7 +804,7 @@ function PrimeMarkedVideos(){
       }
 
       // Wire auto-advance for the intro video to "About"
-      instance._wireAutoAdvanceVideo("Intro", "About");
+      instance._wireAutoAdvanceVideo("Intro", "Tour");
 
       // Initial autoplay safety pass (in case readyState is already good)
       instance._autoplayVideos(intro);
