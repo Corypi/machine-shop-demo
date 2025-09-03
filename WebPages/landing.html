@@ -207,7 +207,7 @@
 
     var lines = [];
 
-    lines.push("=== Left Probe ===");
+    lines.push("=== Content Probe ===");
     lines.push("drawer: " + (drawer ? drawer.id : "—"));
 
     // Title vs TabBar for snap verification
@@ -260,7 +260,7 @@
     if (document.getElementById("DebugPushIndicatorStyles")) return;
     var css = [
       "/* ===== Blue push-down indicator ===== */",
-      "#ScrollPushIndicator{position:fixed;top:0;left:0;right:0;height:16px;overflow:hidden;z-index:2147483647;pointer-events:none;}",
+      "#ScrollPushIndicator{position:fixed;top:0;left:0;right:0;height:100vh;overflow:hidden;z-index:2147483647;pointer-events:none;}",
       "#ScrollPushIndicatorInner{position:absolute;top:-10px;left:50%;transform:translate(-50%,0);font:700 16px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;color:#48b0ff;white-space:nowrap;text-rendering:geometricPrecision;-webkit-font-smoothing:antialiased;will-change:transform;}"
     ].join("");
     var style = document.createElement("style");
