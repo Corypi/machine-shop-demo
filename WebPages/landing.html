@@ -7,49 +7,106 @@
   <link rel="stylesheet" href="../Styles/main.css" />
 </head>
 <body>
+  <!-- Header -->
   <header class="Header">
     <h1 class="HeaderTitle">Welcome to Our Machine Shop</h1>
     <p class="HeaderSubtitle">High-precision parts, modern capabilities.</p>
   </header>
 
+  <!-- Progressive TabBar (built by TabBarController) -->
   <div id="TabBar" class="TabBar" role="tablist" aria-label="Sections" aria-hidden="true">
     <div id="TabBarTrack" class="TabBarTrack"></div>
   </div>
 
+  <!-- Main content: Drawer stack -->
   <main class="Container" id="Top">
+    <!-- HERO / Intro: video with Skip Intro -->
     <section class="Drawer Drawer--FixedHero" id="Intro" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Intro</h3>
-      <div class="DrawerContent DrawerContent--Fill" data-drawer-content>
+      <h3
+        class="DrawerTitle"
+        data-drawer-summary
+        tabindex="0"
+        role="button"
+        aria-expanded="false"
+        aria-controls="Intro__content"
+      >Intro</h3>
+
+      <div class="DrawerContent DrawerContent--Fill" id="Intro__content" data-drawer-content>
         <div class="VideoWrapper">
-          <video class="VideoFixed" src="../Assets/Movie_001.mp4" autoplay muted playsinline webkit-playsinline></video>
-          <button class="SkipButton SkipButton--Overlay"
-                  onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');">
+          <video
+            class="VideoFixed"
+            src="../Assets/Movie_001.mp4"
+            autoplay
+            muted
+            playsinline
+            webkit-playsinline
+          ></video>
+
+          <!-- Uses unified programmatic path that opens About, removes hero, then snaps reliably -->
+          <button
+            class="SkipButton SkipButton--Overlay"
+            type="button"
+            onclick="window.DrawersController && window.DrawersController.OpenThenCloseAndScroll('About','Intro');"
+          >
             Skip Intro
           </button>
         </div>
       </div>
     </section>
 
+    <!-- About -->
     <section class="Drawer" id="About" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">About Us</h3>
-      <div class="DrawerContent" data-drawer-content>
+      <h3
+        class="DrawerTitle"
+        data-drawer-summary
+        tabindex="0"
+        role="button"
+        aria-expanded="false"
+        aria-controls="About__content"
+      >About Us</h3>
+
+      <div class="DrawerContent" id="About__content" data-drawer-content>
         <p>We machine complex parts with tight tolerances and consistent turnaround.</p>
         <p>ISO-style processes, modern CAM, and a quality-first culture.</p>
       </div>
     </section>
 
+    <!-- Shop Tour -->
     <section class="Drawer Drawer--FixedShort" id="Tour" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Shop Tour</h3>
-      <div class="DrawerContent DrawerContent--Fill" data-drawer-content>
+      <h3
+        class="DrawerTitle"
+        data-drawer-summary
+        tabindex="0"
+        role="button"
+        aria-expanded="false"
+        aria-controls="Tour__content"
+      >Shop Tour</h3>
+
+      <div class="DrawerContent DrawerContent--Fill" id="Tour__content" data-drawer-content>
         <div class="VideoWrapper">
-          <video class="VideoFixed" src="../Assets/Movie_002.mp4" preload="metadata" playsinline webkit-playsinline></video>
+          <video
+            class="VideoFixed"
+            src="../Assets/Movie_002.mp4"
+            preload="metadata"
+            playsinline
+            webkit-playsinline
+          ></video>
         </div>
       </div>
     </section>
 
+    <!-- Capabilities -->
     <section class="Drawer" id="Capabilities" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Capabilities</h3>
-      <div class="DrawerContent" data-drawer-content>
+      <h3
+        class="DrawerTitle"
+        data-drawer-summary
+        tabindex="0"
+        role="button"
+        aria-expanded="false"
+        aria-controls="Capabilities__content"
+      >Capabilities</h3>
+
+      <div class="DrawerContent" id="Capabilities__content" data-drawer-content>
         <ul>
           <li>3-axis &amp; 5-axis milling, CNC turning</li>
           <li>Materials: 6061/7075, 304/316, 4140, brass, plastics</li>
@@ -59,24 +116,35 @@
       </div>
     </section>
 
+    <!-- Contact -->
     <section class="Drawer" id="Contact" data-drawer>
-      <h3 class="DrawerTitle" data-drawer-summary tabindex="0" role="button">Contact</h3>
-      <div class="DrawerContent" data-drawer-content>
+      <h3
+        class="DrawerTitle"
+        data-drawer-summary
+        tabindex="0"
+        role="button"
+        aria-expanded="false"
+        aria-controls="Contact__content"
+      >Contact</h3>
+
+      <div class="DrawerContent" id="Contact__content" data-drawer-content>
         <p>Email: <a href="mailto:info@example.com">info@example.com</a></p>
         <p>Phone: 555-0100</p>
       </div>
     </section>
   </main>
 
+  <!-- Footer -->
   <footer class="Footer">
     <small>© <span id="Year"></span> Acme Precision • Demo</small>
   </footer>
 
-  <script src="../Scripts/Utilities.js"></script>
-  <script src="../Scripts/Drawers.js"></script>
-  <script src="../Scripts/TabBar.js"></script>
+  <!-- Scripts (defer to avoid blocking paint) -->
+  <script src="../Scripts/Utilities.js" defer></script>
+  <script src="../Scripts/Drawers.js" defer></script>
+  <script src="../Scripts/TabBar.js" defer></script>
 
-  <!-- Left debug probe (kept) -->
+  <!-- Left debug probe (kept for diagnostics) -->
   <script>
   (function(){
     function probe() {
@@ -112,10 +180,10 @@
   })();
   </script>
 
-  <!-- Right scroll probe (kept) -->
+  <!-- Right scroll probe (kept for diagnostics) -->
   <script>
   (function(){
-    var box, lastY = window.pageYOffset || 0, lastT = performance.now();
+    var box, lastY = window.pageYOffset || 0, lastT = (window.performance && performance.now) ? performance.now() : Date.now();
     function ensureBox(){
       if (!box){
         box = document.createElement("div");
@@ -126,7 +194,7 @@
     function formatMs(ms){ return (ms > 0) ? Math.round(ms) + "ms" : "0ms"; }
     function tick(){
       ensureBox();
-      var now = performance.now();
+      var now = (window.performance && performance.now) ? performance.now() : Date.now();
       var y   = window.pageYOffset || document.documentElement.scrollTop || 0;
       var dt  = Math.max(1, now - lastT);
       var dy  = y - lastY;
@@ -138,8 +206,8 @@
       var anim= dc && typeof dc._isAnimating === "boolean" ? dc._isAnimating : false;
       var dir = dc && typeof dc._scrollDirection === "number" ? (dc._scrollDirection > 0 ? "down" : (dc._scrollDirection < 0 ? "up" : "—")) : "—";
       var last= dc && typeof dc._lastScrollY === "number" ? Math.round(dc._lastScrollY) : "—";
-      var sup = dc && typeof dc._suppressIOUntil === "number" ? Math.max(0, Math.round(dc._suppressIOUntil - performance.now())) : 0;
-      var frz = dc && typeof dc._freezeUntil === "number" ? Math.max(0, Math.round(dc._freezeUntil  - performance.now())) : 0;
+      var sup = dc && typeof dc._suppressIOUntil === "number" ? Math.max(0, Math.round(dc._suppressIOUntil - ((window.performance && performance.now) ? performance.now() : Date.now()))) : 0;
+      var frz = dc && typeof dc._freezeUntil === "number" ? Math.max(0, Math.round(dc._freezeUntil  - ((window.performance && performance.now) ? performance.now() : Date.now()))) : 0;
       var thr = (dc && typeof dc._threshold === "function") ? Math.round(dc._threshold()) : "—";
       var lines = [
         "=== Scroll Probe ===",
@@ -165,5 +233,17 @@
     }
   })();
   </script>
+
+  <!-- Noscript notice to keep UX understandable if JS is disabled -->
+  <noscript>
+    <style>
+      /* Make drawers reasonably readable without JS */
+      [data-drawer-content] { height: auto !important; padding: 0 1rem 1.5rem !important; }
+      .TabBar { display: none !important; }
+    </style>
+    <div style="padding:1rem; color:#fff; background:#222;">
+      JavaScript is disabled. Sections are expanded for readability, but interactive features are unavailable.
+    </div>
+  </noscript>
 </body>
 </html>
