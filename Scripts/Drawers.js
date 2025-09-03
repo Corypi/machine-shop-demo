@@ -578,40 +578,48 @@
     });
   };
 
-  DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
-    var heroId = this._heroId();
+  // Replace the whole method with this:
+DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
+  var heroId = this._heroId();
 
-    if (closeId && heroId && closeId === heroId) {
-      // 1) Hide hero + show tabs this tick
-      var hero = document.getElementById(closeId);
-      if (hero && hero.style.display !== "none") {
-        this._forceRemoveFromFlow(hero);
-      }
-      this._ensureTabBarVisible();
-
-      // 2) Next frame: open target
-      var self = this;
-      requestAnimationFrame(function(){
-        self.OpenById(openId);
-
-        // 3) Next frame: snap under bar (after open/layout settles)
-        requestAnimationFrame(function(){
-          var target = document.getElementById(openId);
-          self._snapUnderTabs(target);
-        });
-      });
-      return;
+  // --- Hero path (Skip Intro) ---
+  if (closeId && heroId && closeId === heroId) {
+    // 1) Hide hero + show tabs immediately
+    var hero = document.getElementById(closeId);
+    if (hero && hero.style.display !== "none") {
+      this._forceRemoveFromFlow(hero);
     }
+    this._ensureTabBarVisible();
 
-    // Non-hero path
-    if (closeId) this.CloseById(closeId);
-    this.OpenById(openId);
-    var self2 = this;
-    requestAnimationFrame(function(){
-      var t2 = document.getElementById(openId);
-      self2._snapUnderTabs(t2);
+    // 2) Next frame: open target and wait until it is actually opened
+    var self = this;
+    requestAnimationFrame(function () {
+      // Snap only AFTER the drawer reports it's opened (transition ended)
+      function onOpened(e){
+        if (!e || !e.detail || e.detail.id !== openId) return;
+        document.removeEventListener("drawer:opened", onOpened);
+        var target = document.getElementById(openId);
+        // Defer snapping until TabBar + Container padding are stable
+        self._snapUnderTabsDeferred(target);
+      }
+      document.addEventListener("drawer:opened", onOpened);
+
+      self.OpenById(openId);
     });
-  };
+
+    return;
+  }
+
+  // --- Non-hero path (regular tab clicks etc.) ---
+  if (closeId) this.CloseById(closeId);
+  this.OpenById(openId);
+
+  var self2 = this;
+  requestAnimationFrame(function(){
+    var t2 = document.getElementById(openId);
+    self2._snapUnderTabsDeferred(t2);
+  });
+};
 
   // ---------- Boot ----------
 
