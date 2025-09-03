@@ -664,6 +664,22 @@
 
   // ---------- Public helpers ----------
 
+function PrimeMarkedVideos(){
+  var vids = document.querySelectorAll('video[data-prime="true"]');
+  for (var i = 0; i < vids.length; i++){
+    var v = vids[i];
+    try {
+      // Make sure policies are friendly to preloading
+      v.muted = true;
+      v.playsInline = true;
+      // Ensure eager behavior is active
+      v.preload = "auto";
+      // Kick the network pipeline
+      v.load();
+    } catch(_) {}
+  }
+}
+
   DrawerController.prototype._FindAncestorDrawer = function (node) {
     while (node && node !== document) {
       if (node.hasAttribute && node.hasAttribute("data-drawer")) return node;
@@ -773,6 +789,8 @@
   function InitializeDrawersWhenReady() {
     var instance = new DrawerController(document);
     window.DrawersController = instance;
+    
+    PrimeMarkedVideos();
 
     function openIntro() {
       var intro = document.getElementById("Intro");
