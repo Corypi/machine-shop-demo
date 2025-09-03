@@ -7,6 +7,8 @@
   // - Delegates open/scroll behavior to DrawersController when available.
   // - Keeps the CSS variable --TabBarOffsetPixels in sync with the bar's
   //   actual height so snapping via scroll-margin-top is exact.
+  // - NEW: When tabs are visible ("tab mode"), only the active drawer
+  //   stays in the DOM flow; others are hidden via DrawersController.
   // ==========================================================
 
   function TabBarController(){
@@ -87,10 +89,15 @@
         self._applyVisibility(e.detail.id);
         self._renderTabsVisibility();
         self._updateTabBarOffsetVar();
+        // Ensure tab-mode visibility policy is enforced by Drawers
+        if (window.DrawersController && typeof window.DrawersController._applyTabModeVisibility === "function"){
+          window.DrawersController._applyTabModeVisibility(e.detail.id);
+        }
       }
     });
 
-    // When hero is collapsed by DrawersController, show bar and refresh
+    // When hero is collapsed by DrawersController, show bar and refresh.
+    // Also enter "tab mode": only the active drawer should remain in flow.
     document.addEventListener("hero:collapsed", function(){
       self._heroCollapsed = true;
       document.body.classList.add("Tabs--Visible");
@@ -98,6 +105,10 @@
       self._renderTabsVisibility();
       self._applyVisibility(self._active);
       self._updateTabBarOffsetVar();
+
+      if (window.DrawersController && typeof window.DrawersController._applyTabModeVisibility === "function"){
+        window.DrawersController._applyTabModeVisibility(self._active);
+      }
     });
   };
 
@@ -110,6 +121,11 @@
     this._applyVisibility(id);
     this._renderTabsVisibility();
     this._updateTabBarOffsetVar();
+
+    // Enter/maintain tab mode immediately: hide non-active drawers now.
+    if (window.DrawersController && typeof window.DrawersController._applyTabModeVisibility === "function"){
+      window.DrawersController._applyTabModeVisibility(id);
+    }
 
     // Prefer unified programmatic path (will open + snap robustly)
     if (window.DrawersController && typeof window.DrawersController.OpenThenCloseAndScroll === "function"){
