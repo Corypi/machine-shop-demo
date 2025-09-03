@@ -1,8 +1,8 @@
-// Drawers.js — Patch
-// Fix: When skipping Intro on first page-load, "About" sometimes snapped with extra space.
-// Root cause: we were snapping after "drawer:opened" (fired before the open animation settled).
-// Change: emit a reliable "drawer:open-complete" when the drawer is fully laid out,
-// and have OpenThenCloseAndScroll wait for that before performing the snap.
+// Drawers.js — Patch: Autoplay videos whenever their drawer is opened
+// - Adds a generic _autoplayVideos(drawer) helper.
+// - Calls it from OpenDrawer for ALL drawers (Intro + Shop Tour).
+// - Keeps existing page-load Intro autoplay behavior.
+// - Leaves close behavior (pause/reset) as-is.
 
 (function () {
   "use strict";
@@ -166,6 +166,32 @@
   };
 
   // ===================================================
+  // NEW: Ensure videos autoplay when a drawer opens
+  // ===================================================
+  DrawerController.prototype._autoplayVideos = function(drawer){
+    if (!drawer) return;
+    var vids = drawer.querySelectorAll("video");
+    for (var i = 0; i < vids.length; i++){
+      (function(video){
+        function tryPlay(){
+          try {
+            video.muted = true;           // allow autoplay without gesture
+            video.playsInline = true;     // iOS inline
+            var p = video.play();
+            if (p && typeof p.catch === "function"){ p.catch(function(){}); }
+          } catch(_){}
+        }
+        if (video.readyState >= 2){ tryPlay(); }
+        else {
+          // Fire once when metadata is ready
+          var onMeta = function(){ video.removeEventListener("loadedmetadata", onMeta); tryPlay(); };
+          video.addEventListener("loadedmetadata", onMeta, { once: true, passive: true });
+        }
+      })(vids[i]);
+    }
+  };
+
+  // ===================================================
 
   DrawerController.prototype.Initialize = function () {
     this._drawers   = this._root.querySelectorAll("[data-drawer]");
@@ -273,6 +299,9 @@
     // Fire "opened" immediately (state toggled)
     document.dispatchEvent(new CustomEvent("drawer:opened", { detail: { id: drawer.id }}));
 
+    // 🔊 NEW: Ensure any video inside this drawer starts playing now
+    this._autoplayVideos(drawer);
+
     var self = this;
 
     function dispatchOpenComplete(){
@@ -309,11 +338,11 @@
         }
         self._isAnimating = false;
         self._drainQueue();
-        dispatchOpenComplete(); // ✅ settled with no animation
+        dispatchOpenComplete();
         return;
       }
 
-      self.AnimateHeight(content, startHeight, endHeight, dispatchOpenComplete); // pass callback
+      self.AnimateHeight(content, startHeight, endHeight, dispatchOpenComplete);
     });
 
     this._wireMediaAutoGrow(content);
@@ -389,7 +418,6 @@
 
   // ---------- Animation + ARIA ----------
 
-  // AnimateHeight now optionally accepts an onComplete callback for "open-complete".
   DrawerController.prototype.AnimateHeight = function (element, startHeight, endHeight, onComplete) {
     var self = this;
 
@@ -426,7 +454,7 @@
       requestAnimationFrame(function () {
         requestAnimationFrame(function () {
           self._drainQueue();
-          if (typeof onComplete === "function") { onComplete(); } // ✅ settled after animation
+          if (typeof onComplete === "function") { onComplete(); }
         });
       });
     }
@@ -553,7 +581,6 @@
     SnapManager.WaitStable(function(){ SnapManager.SnapToTitle(el, "auto"); });
   };
 
-  // OpenThenCloseAndScroll now waits for "drawer:open-complete" before snapping.
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     var self = this;
     var heroId = this._heroId();
@@ -596,19 +623,14 @@
       // Keep Intro open on first load (no snap) and autoplay video
       intro.removeAttribute("hidden");
       intro.style.display = "";
-      if (!intro.classList.contains("Drawer--Open")) { instance.OpenDrawer(intro); }
+      if (!intro.classList.contains("Drawer--Open")) {
+        instance.OpenDrawer(intro);
+      }
 
       instance._wireAutoAdvanceVideo("Intro", "About");
 
-      var vid = intro.querySelector("video");
-      if (vid) {
-        try {
-          vid.muted = true;
-          vid.playsInline = true;
-          var p = vid.play();
-          if (p && typeof p.catch === "function") p.catch(function(){});
-        } catch (e) {}
-      }
+      // Initial autoplay safety pass (in case readyState is already good)
+      instance._autoplayVideos(intro);
     }
 
     if (document.readyState === "loading") {
