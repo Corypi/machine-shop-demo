@@ -1,9 +1,13 @@
+// Drawers.js (patch)
+// Change: suppress snap on initial page-load Intro open.
+// Also, when OpenThenCloseAndScroll is orchestrating the snap, it tells OpenById not to snap,
+// so we avoid double-snapping. All other interactions keep snapping as before.
+
 (function () {
   "use strict";
 
   // ==========================================================
-  // SnapManager
-  // Single, reliable snapping primitive used everywhere.
+  // SnapManager (unchanged)
   // ==========================================================
   var SnapManager = (function(){
     var MaxWaitMs = 500;
@@ -68,8 +72,6 @@
   var OnlyOneOpenAtATime  = true;
   var SuppressMsAfterProgrammaticClose = 250;
 
-  // ============================================
-
   function DrawerController(root) {
     this._root        = root;
     this._isAnimating = false;
@@ -78,9 +80,7 @@
     this._summaries = null;
 
     this._queue = [];
-    this._enqueue = function (fn) {
-      if (typeof fn === "function") this._queue.push(fn);
-    };
+    this._enqueue = function (fn) { if (typeof fn === "function") this._queue.push(fn); };
     this._drainQueue = function () {
       if (this._isAnimating) return;
       while (this._queue.length) {
@@ -90,9 +90,7 @@
       }
     };
 
-    this._now = function () {
-      return (window.performance && performance.now) ? performance.now() : Date.now();
-    };
+    this._now = function () { return (window.performance && performance.now) ? performance.now() : Date.now(); };
 
     this.Initialize();
   }
@@ -104,19 +102,13 @@
     return this._drawers[0] && this._drawers[0].id ? this._drawers[0].id : null;
   };
 
-  DrawerController.prototype._tabBarEl = function(){
-    return document.getElementById("TabBar");
-  };
+  DrawerController.prototype._tabBarEl = function(){ return document.getElementById("TabBar"); };
+  DrawerController.prototype._isTabMode = function(){ return document.body.classList.contains("Tabs--Visible"); };
 
-  DrawerController.prototype._isTabMode = function(){
-    return document.body.classList.contains("Tabs--Visible");
-  };
-
-  // NEW: In tab mode, hide only drawers BEFORE the active index.
+  // In tab mode, hide only drawers BEFORE the active index.
   DrawerController.prototype._applyTabModeVisibility = function(activeId){
     var inTabMode = this._isTabMode();
     if (!inTabMode){
-      // Legacy: show everything
       for (var k = 0; k < this._drawers.length; k++){
         this._drawers[k].removeAttribute("hidden");
         this._drawers[k].style.display = "";
@@ -124,13 +116,10 @@
       return;
     }
 
-    // Compute active index in document order
     var activeIdx = -1;
     for (var i = 0; i < this._drawers.length; i++){
       if (this._drawers[i].id === activeId){ activeIdx = i; break; }
     }
-
-    // Safety: if somehow unknown, keep all visible
     if (activeIdx < 0){
       for (var j = 0; j < this._drawers.length; j++){
         this._drawers[j].removeAttribute("hidden");
@@ -142,11 +131,9 @@
     for (var n = 0; n < this._drawers.length; n++){
       var d = this._drawers[n];
       if (n < activeIdx){
-        // Hide drawers that are BEFORE the active one (already represented by tabs)
         d.setAttribute("hidden", "");
         d.style.display = "none";
       } else {
-        // Keep the active and all AFTER it visible in flow
         d.removeAttribute("hidden");
         d.style.display = "";
       }
@@ -162,29 +149,19 @@
     }
   };
 
-  // Instantly remove a drawer from layout (no animation)
   DrawerController.prototype._forceRemoveFromFlow = function(drawer){
     if (!drawer) return;
-
     try {
       var vids = drawer.querySelectorAll("video");
       for (var i = 0; i < vids.length; i++) { vids[i].pause(); }
     } catch(_) {}
-
     var content = drawer.querySelector("[data-drawer-content]");
-    if (content){
-      content.style.transition = "";
-      content.style.height = "";
-    }
-
+    if (content){ content.style.transition = ""; content.style.height = ""; }
     this.SetAriaExpanded(drawer, false);
-
     drawer.classList.remove("Drawer--Open", "Drawer--NoTail");
     drawer.setAttribute("hidden", "");
     drawer.style.display = "none";
-
     void document.body.offsetHeight;
-
     document.dispatchEvent(new CustomEvent("hero:collapsed", { detail: { id: drawer.id }}));
   };
 
@@ -213,13 +190,11 @@
 
     window.addEventListener("resize", function(){ SnapManager.UpdateTabBarOffsetVar(); }, { passive: true });
 
-    // Enforce tab-mode visibility whenever a drawer actually opens.
     var self = this;
     document.addEventListener("drawer:opened", function(e){
       if (e && e.detail && e.detail.id){ self._applyTabModeVisibility(e.detail.id); }
     });
 
-    // If already in tab-mode on load, keep only drawers BEFORE active hidden.
     if (this._isTabMode()){
       var activeOpen = null;
       for (var k = 0; k < this._drawers.length; k++){
@@ -242,9 +217,7 @@
   DrawerController.prototype.OnToggleRequested = function (evt) {
     if (this._isAnimating) {
       var self = this, target = evt.currentTarget;
-      this._enqueue(function () {
-        self.OnToggleRequested({ currentTarget: target, key: "queued" });
-      });
+      this._enqueue(function () { self.OnToggleRequested({ currentTarget: target, key: "queued" }); });
       return;
     }
 
@@ -261,9 +234,7 @@
 
       if (heroId && drawer.id !== heroId) {
         var hero = document.getElementById(heroId);
-        if (hero && hero.style.display !== "none") {
-          this._forceRemoveFromFlow(hero);
-        }
+        if (hero && hero.style.display !== "none") { this._forceRemoveFromFlow(hero); }
         this._ensureTabBarVisible();
       }
 
@@ -290,11 +261,8 @@
     var content = drawer.querySelector("[data-drawer-content]");
     if (!content) return;
 
-    if (content.classList.contains("DrawerContent--Fill")) {
-      drawer.classList.add("Drawer--NoTail");
-    } else {
-      drawer.classList.remove("Drawer--NoTail");
-    }
+    if (content.classList.contains("DrawerContent--Fill")) { drawer.classList.add("Drawer--NoTail"); }
+    else { drawer.classList.remove("Drawer--NoTail"); }
 
     var startHeight = content.getBoundingClientRect().height | 0;
     content.style.height = Math.max(0, startHeight) + "px";
@@ -364,9 +332,7 @@
     document.dispatchEvent(new CustomEvent("drawer:closed", { detail: { id: drawer.id }}));
 
     var vids = drawer.querySelectorAll("video");
-    for (var i = 0; i < vids.length; i++) {
-      try { vids[i].pause(); vids[i].currentTime = 0; } catch (e) {}
-    }
+    for (var i = 0; i < vids.length; i++) { try { vids[i].pause(); vids[i].currentTime = 0; } catch (e) {} }
 
     var endHeight = 0;
     if (Math.abs(endHeight - startHeight) < 0.5) {
@@ -385,12 +351,11 @@
     drawer.dataset.lockedUntil = String(this._now() + SuppressMsAfterProgrammaticClose);
   };
 
-  // UPDATED: In tab mode, only hide drawers BEFORE the active index.
+  // In tab mode, only hide drawers BEFORE the active index.
   DrawerController.prototype.CloseSiblings = function (exceptDrawer, removeHero) {
     var heroId = this._heroId();
     var inTabMode = this._isTabMode();
 
-    // Compute index of the drawer we just opened (the "active" in document order)
     var activeIdx = -1;
     for (var x = 0; x < this._drawers.length; x++){
       if (this._drawers[x] === exceptDrawer){ activeIdx = x; break; }
@@ -400,26 +365,16 @@
       var d = this._drawers[i];
       if (d === exceptDrawer) continue;
 
-      if (d.classList.contains("Drawer--Open")) {
-        this.CloseDrawer(d);
-      }
+      if (d.classList.contains("Drawer--Open")) { this.CloseDrawer(d); }
 
       if (removeHero && heroId && d.id === heroId) {
-        if (d.style.display !== "none" || !d.hasAttribute("hidden")) {
-          this._forceRemoveFromFlow(d);
-        }
+        if (d.style.display !== "none" || !d.hasAttribute("hidden")) { this._forceRemoveFromFlow(d); }
         continue;
       }
 
       if (inTabMode){
-        // Hide only drawers before the active one; keep active and later ones visible.
-        if (i < activeIdx){
-          d.setAttribute("hidden", "");
-          d.style.display = "none";
-        } else {
-          d.removeAttribute("hidden");
-          d.style.display = "";
-        }
+        if (i < activeIdx){ d.setAttribute("hidden", ""); d.style.display = "none"; }
+        else { d.removeAttribute("hidden"); d.style.display = ""; }
       } else {
         d.removeAttribute("hidden");
         d.style.display = "";
@@ -457,18 +412,13 @@
                          drawer.classList.contains("Drawer--FixedShort")) ||
                         element.classList.contains("DrawerContent--Fill");
 
-      if (endHeight > 0) {
-        element.style.height = useCssClamp ? "" : "auto";
-      } else {
-        element.style.height = "";
-      }
+      if (endHeight > 0) { element.style.height = useCssClamp ? "" : "auto"; }
+      else { element.style.height = ""; }
 
       self._isAnimating = false;
 
       requestAnimationFrame(function () {
-        requestAnimationFrame(function () {
-          self._drainQueue();
-        });
+        requestAnimationFrame(function () { self._drainQueue(); });
       });
     }
 
@@ -496,11 +446,8 @@
       if (!content) continue;
 
       if (drawer.classList.contains("Drawer--Open")) {
-        if (content.classList.contains("DrawerContent--Fill")) {
-          drawer.classList.add("Drawer--NoTail");
-        } else {
-          drawer.classList.remove("Drawer--NoTail");
-        }
+        if (content.classList.contains("DrawerContent--Fill")) { drawer.classList.add("Drawer--NoTail"); }
+        else { drawer.classList.remove("Drawer--NoTail"); }
 
         if (drawer.classList.contains("Drawer--FixedHero") ||
             drawer.classList.contains("Drawer--FixedShort") ||
@@ -536,41 +483,6 @@
     }
   };
 
-  // --- Optional: auto-advance a video drawer ---
-  DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
-    var drawer = document.getElementById(drawerId);
-    if (!drawer) return;
-    var content = drawer.querySelector("[data-drawer-content]");
-    var video   = content ? content.querySelector("video") : null;
-    if (!video) return;
-
-    var self = this;
-    var started = false;
-
-    function tryPlay() {
-      try {
-        video.muted = true;
-        video.playsInline = true;
-        var p = video.play();
-        if (p && typeof p.catch === "function") p.catch(function(){});
-      } catch(e) {}
-    }
-
-    video.addEventListener("playing", function () { started = true; }, { passive:true });
-    video.addEventListener("loadedmetadata", function () { tryPlay(); }, { passive:true });
-
-    video.addEventListener("ended", function () {
-      if (!started) return;
-      if (!drawer.classList.contains("Drawer--Open")) return;
-
-      if (nextId) {
-        self.OpenThenCloseAndScroll(nextId, drawerId);
-      } else {
-        self.CloseAndLock(drawer);
-      }
-    }, { passive:true });
-  };
-
   // ---------- Public helpers ----------
 
   DrawerController.prototype._FindAncestorDrawer = function (node) {
@@ -581,10 +493,14 @@
     return null;
   };
 
-  DrawerController.prototype.OpenById = function (id) {
+  // UPDATED SIGNATURE: OpenById(id, opts?)
+  // opts.snap: whether to perform a snap after opening (default true)
+  DrawerController.prototype.OpenById = function (id, opts) {
+    var snap = !opts || opts.snap !== false;
+
     if (this._isAnimating) {
       var self = this;
-      this._enqueue(function(){ self.OpenById(id); });
+      this._enqueue(function(){ self.OpenById(id, opts); });
       return;
     }
 
@@ -594,9 +510,7 @@
     var heroId = this._heroId();
     if (heroId && id !== heroId) {
       var hero = document.getElementById(heroId);
-      if (hero && hero.style.display !== "none") {
-        this._forceRemoveFromFlow(hero);
-      }
+      if (hero && hero.style.display !== "none") { this._forceRemoveFromFlow(hero); }
       this._ensureTabBarVisible();
     }
 
@@ -607,17 +521,16 @@
 
       if (OnlyOneOpenAtATime) {
         var self2 = this;
-        if (this._isAnimating) {
-          this._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
-        } else {
-          self2.CloseSiblings(drawer, /*removeHero*/true);
-        }
+        if (this._isAnimating) { this._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); }); }
+        else { self2.CloseSiblings(drawer, /*removeHero*/true); }
       }
     }
 
-    SnapManager.UpdateTabBarOffsetVar();
-    var self3 = this;
-    SnapManager.WaitStable(function(){ self3.ScrollToDrawer(id); });
+    if (snap){
+      SnapManager.UpdateTabBarOffsetVar();
+      var self3 = this;
+      SnapManager.WaitStable(function(){ self3.ScrollToDrawer(id); });
+    }
   };
 
   DrawerController.prototype.CloseById = function (id) {
@@ -629,34 +542,30 @@
   DrawerController.prototype.ScrollToDrawer = function (id) {
     var el = typeof id === "string" ? document.getElementById(id) : id;
     if (!el) return;
-    SnapManager.WaitStable(function(){
-      SnapManager.SnapToTitle(el, "auto");
-    });
+    SnapManager.WaitStable(function(){ SnapManager.SnapToTitle(el, "auto"); });
   };
 
+  // When orchestrating open+snap (e.g., from TabBar), we suppress the internal snap in OpenById
+  // and do a single snap after we receive "drawer:opened".
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     var self = this;
     var heroId = this._heroId();
 
     function openAndSnap() {
-      self.OpenById(openId);
+      self.OpenById(openId, { snap: false }); // <-- suppress snap here
 
       function onOpened(e){
         if (!e || !e.detail || e.detail.id !== openId) return;
         document.removeEventListener("drawer:opened", onOpened);
         SnapManager.UpdateTabBarOffsetVar();
-        SnapManager.WaitStable(function(){
-          self.ScrollToDrawer(openId);
-        });
+        SnapManager.WaitStable(function(){ self.ScrollToDrawer(openId); });
       }
       document.addEventListener("drawer:opened", onOpened);
     }
 
     if (closeId && heroId && closeId === heroId) {
       var hero = document.getElementById(closeId);
-      if (hero && hero.style.display !== "none") {
-        this._forceRemoveFromFlow(hero);
-      }
+      if (hero && hero.style.display !== "none") { this._forceRemoveFromFlow(hero); }
       this._ensureTabBarVisible();
       SnapManager.UpdateTabBarOffsetVar();
       requestAnimationFrame(openAndSnap);
@@ -678,7 +587,9 @@
       if (!intro) return;
 
       instance._wireAutoAdvanceVideo("Intro", "About");
-      instance.OpenById("Intro");
+
+      // IMPORTANT: do NOT snap on initial page-load Intro open
+      instance.OpenById("Intro", { snap: false });
 
       var vid = intro.querySelector("video");
       if (vid) {
