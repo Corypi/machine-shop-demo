@@ -5,6 +5,8 @@
   <title>Machine Shop Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="../Styles/main.css" />
+  <link rel="preload" as="video" href="../Assets/Movie_001.mp4" type="video/mp4">
+  <link rel="preload" as="video" href="../Assets/Movie_002.mp4" type="video/mp4">
 </head>
 <body>
   <!-- Header -->
@@ -40,6 +42,7 @@
             muted
             playsinline
             webkit-playsinline
+            preload="auto"
           ></video>
 
           <!-- Uses unified programmatic path that opens About, removes hero, then snaps reliably -->
@@ -79,10 +82,10 @@
       <video
         class="VideoFixed"
         src="../Assets/Movie_002.mp4"
-        preload="metadata"
         muted
         playsinline
         webkit-playsinline
+        preload="auto"
       ></video>
     </div>
   </div>
