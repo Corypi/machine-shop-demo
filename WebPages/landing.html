@@ -250,15 +250,13 @@
 })();
 </script>
 
-<!-- Right scroll probe + Blue push-down indicator (self-contained CSS) -->
+<!-- Right scroll probe (iOS-robust) + Blue push-down indicator -->
 <script>
 (function(){
-  var box, lastY = window.pageYOffset || document.documentElement.scrollTop || 0;
-  var lastT = (performance.now ? performance.now() : Date.now());
-  var indWrap, indInner;
+  "use strict";
 
-  // --- Inject debug CSS once ---
-  (function ensureDebugStyle(){
+  // ===== Inject tiny debug CSS (only once) =====
+  function ensureDebugStyle(){
     if (document.getElementById("DebugPushIndicatorStyles")) return;
     var css = [
       "/* ===== Blue push-down indicator ===== */",
@@ -270,82 +268,160 @@
     style.type = "text/css";
     style.appendChild(document.createTextNode(css));
     document.head.appendChild(style);
-  })();
-
-  // --- Blue push-down indicator elements ---
-  function ensureIndicator(){
-    if (!indWrap){
-      indWrap = document.createElement("div");
-      indWrap.id = "ScrollPushIndicator";
-      indInner = document.createElement("div");
-      indInner.id = "ScrollPushIndicatorInner";
-      indInner.textContent = ">——————————<";
-      indWrap.appendChild(indInner);
-      document.body.appendChild(indWrap);
-    }
   }
 
-  // --- Probe box on the right ---
+  // ===== Create indicator elements (only once) =====
+  function ensureIndicator(){
+    if (!document.getElementById("ScrollPushIndicator")){
+      var wrap = document.createElement("div");
+      wrap.id = "ScrollPushIndicator";
+      var inner = document.createElement("div");
+      inner.id = "ScrollPushIndicatorInner";
+      inner.textContent = ">——————————<"; // the blue bar
+      wrap.appendChild(inner);
+      document.body.appendChild(wrap);
+    }
+  }
+  function indicatorInner(){
+    return document.getElementById("ScrollPushIndicatorInner");
+  }
+
+  // ===== Your original iOS-robust helpers =====
+  function getScrollYWithSource(){
+    var candidates = [];
+    if (typeof window.scrollY === "number")     { candidates.push({y: window.scrollY || 0, source: "window.scrollY"}); }
+    if (typeof window.pageYOffset === "number") { candidates.push({y: window.pageYOffset || 0, source: "window.pageYOffset"}); }
+    var se = document.scrollingElement;
+    if (se && typeof se.scrollTop === "number") { candidates.push({y: se.scrollTop || 0, source: "document.scrollingElement.scrollTop"}); }
+    var de = document.documentElement;
+    if (de && typeof de.scrollTop === "number") { candidates.push({y: de.scrollTop || 0, source: "document.documentElement.scrollTop"}); }
+    var bo = document.body;
+    if (bo && typeof bo.scrollTop === "number") { candidates.push({y: bo.scrollTop || 0, source: "document.body.scrollTop"}); }
+    if (window.visualViewport && typeof window.visualViewport.pageTop === "number") {
+      candidates.push({y: Math.max(0, Math.round(window.visualViewport.pageTop)), source: "visualViewport.pageTop"});
+    }
+    if (de && typeof de.getBoundingClientRect === "function") {
+      var rt = de.getBoundingClientRect().top;
+      if (isFinite(rt)) { candidates.push({y: Math.max(0, Math.round(-rt)), source: "rootRect.top"}); }
+    }
+    var best = { y: 0, source: "none" };
+    for (var i = 0; i < candidates.length; i++){
+      if (candidates[i].y > best.y) { best = candidates[i]; }
+    }
+    return best;
+  }
+
+  function getNow(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+
   function ensureBox(){
+    var box = document.getElementById("ScrollProbe");
     if (!box){
       box = document.createElement("div");
       box.id = "ScrollProbe";
       document.body.appendChild(box);
     }
+    return box;
   }
 
-  function now(){ return (performance.now ? performance.now() : Date.now()); }
-  function formatMs(ms){ return (ms > 0) ? Math.round(ms) + "ms" : "0ms"; }
+  function getTabBarBottom(){
+    var bar = document.getElementById("TabBar");
+    if (!bar) return 0;
+    var r = bar.getBoundingClientRect();
+    return Math.round(r.bottom || 0);
+  }
+
+  function readCssVarPx(name){
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    var num = parseFloat(v);
+    return isFinite(num) ? Math.round(num) : 0;
+  }
+
+  // Track last opened drawer id (for snap diagnostics)
+  var lastOpenedId = null;
+  document.addEventListener("drawer:opened", function(e){
+    if (e && e.detail && e.detail.id){ lastOpenedId = e.detail.id; }
+  });
+  document.addEventListener("DOMContentLoaded", function(){
+    var open = document.querySelector(".Drawer.Drawer--Open");
+    if (open && open.id) lastOpenedId = open.id;
+  });
+
+  // ===== Loop =====
+  var box = null;
+  var first = getScrollYWithSource();
+  var lastY = first.y;
+  var lastT = getNow();
+
+  // rAF can be throttled during momentum on iOS; also refresh on these events
+  var forceRefresh = false;
+  window.addEventListener("scroll", function(){ forceRefresh = true; }, { passive:true });
+  if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
+    window.visualViewport.addEventListener("scroll", function(){ forceRefresh = true; }, { passive:true });
+  }
 
   function tick(){
-    ensureBox();
+    ensureDebugStyle();
     ensureIndicator();
+    box = ensureBox();
 
-    var t  = now();
-    var y  = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var now = getNow();
+    var best = getScrollYWithSource();
+    var y    = best.y;
     if (y < 0) y = 0; // ignore rubber-band negatives on iOS
-    var dt = Math.max(1, t - lastT);
-    var dy = y - lastY;
-    var v  = (dy / dt * 1000).toFixed(1); // px/s
+    var dt   = Math.max(1, now - lastT);
+    var dy   = y - lastY;
+    var v    = (dy / dt * 1000);
 
-    // Move indicator down by current scroll (one direction we care about: down)
+    // ===== NEW: push-down indicator follows scroll (downwards) =====
     var indY = (y > 0 ? Math.round(y) : 0);
-    if (indInner){
-      indInner.style.transform = "translate(-50%, " + indY + "px)";
+    var ii = indicatorInner();
+    if (ii){
+      ii.style.transform = "translate(-50%, " + indY + "px)";
     }
-    window.__IndicatorY = indY; // exposed for debugging
+    window.__IndicatorY = indY; // exposed for debugging/automation
 
-    // Existing DrawersController signals (if present)
+    // Existing diagnostics
     var dc  = window.DrawersController || null;
-    var acc = dc && typeof dc._accumulatedInput === "number" ? Math.round(dc._accumulatedInput) : "—";
-    var fzn = dc && typeof dc._isFrozen === "function" ? dc._isFrozen() : false;
-    var blc = dc && typeof dc._blockScroll === "boolean" ? dc._blockScroll : false;
-    var anim= dc && typeof dc._isAnimating === "boolean" ? dc._isAnimating : false;
-    var dir = dc && typeof dc._scrollDirection === "number" ? (dc._scrollDirection > 0 ? "down" : (dc._scrollDirection < 0 ? "up" : "—")) : "—";
-    var last= dc && typeof dc._lastScrollY === "number" ? Math.round(dc._lastScrollY) : "—";
-    var sup = dc && typeof dc._suppressIOUntil === "number" ? Math.max(0, Math.round(dc._suppressIOUntil - now())) : 0;
-    var frz = dc && typeof dc._freezeUntil === "number" ? Math.max(0, Math.round(dc._freezeUntil  - now())) : 0;
-    var thr = (dc && typeof dc._threshold === "function") ? Math.round(dc._threshold()) : "—";
+    var isAnimating = !!(dc && dc._isAnimating);
+    var tabMode   = document.body.classList.contains("Tabs--Visible");
+    var barBottom = getTabBarBottom();
+    var cssOffset = readCssVarPx("--TabBarOffsetPixels");
+
+    var activeTopDelta = "—";
+    if (lastOpenedId){
+      var active = document.getElementById(lastOpenedId);
+      if (active){
+        var title = active.querySelector("[data-drawer-summary]") || active;
+        var tr = title.getBoundingClientRect();
+        activeTopDelta = Math.round(tr.top - barBottom) + "px";
+      }
+    }
 
     var lines = [
       "=== Scroll Probe ===",
-      "y: " + Math.round(y) + "px",
-      "dy: " + Math.round(dy) + "px  (" + v + " px/s)",
+      "y: " + Math.round(y) + "px  [" + best.source + "]",
+      "dy: " + Math.round(dy) + "px  (" + v.toFixed(1) + " px/s)",
       "",
-      "Indicator: " + indY + "px",
+      "Indicator: " + indY + "px",            // 👈 added line
       "",
-      "accumulatedInput: " + acc + (thr !== "—" ? " / thr " + thr : ""),
-      "direction: " + dir,
-      "lastScrollY: " + last,
-      "isAnimating: " + anim,
-      "freeze(ms left): " + formatMs(frz),
-      "suppressIO(ms): " + formatMs(sup),
-      "blockScroll: " + blc
+      "tabMode: " + tabMode,
+      "barBottom: " + barBottom + "px",
+      "--TabBarOffsetPixels: " + cssOffset + "px",
+      "activeDrawer: " + (lastOpenedId || "—"),
+      "active title vs bar: " + activeTopDelta,
+      "",
+      "isAnimating: " + isAnimating
     ];
-    box.textContent = lines.join("\n");
 
-    lastY = y; lastT = t;
-    requestAnimationFrame(tick);
+    box.textContent = lines.join("\n");
+    lastY = y; lastT = now;
+
+    if (forceRefresh){
+      forceRefresh = false;
+      requestAnimationFrame(tick);
+    } else {
+      requestAnimationFrame(tick);
+    }
   }
 
   if (document.readyState === "loading"){
