@@ -260,7 +260,7 @@
     if (document.getElementById("DebugPushIndicatorStyles")) return;
     var css = [
       "/* ===== Blue push-down indicator ===== */",
-      "#ScrollPushIndicator{position:fixed;top:0;left:0;right:0;height:16px;overflow:hidden;z-index:99998;pointer-events:none;}",
+      "#ScrollPushIndicator{position:fixed;top:0;left:0;right:0;height:16px;overflow:hidden;z-index:2147483647;pointer-events:none;}",
       "#ScrollPushIndicatorInner{position:absolute;top:-10px;left:50%;transform:translate(-50%,0);font:700 16px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;color:#48b0ff;white-space:nowrap;text-rendering:geometricPrecision;-webkit-font-smoothing:antialiased;will-change:transform;}"
     ].join("");
     var style = document.createElement("style");
@@ -318,6 +318,8 @@
     if (!box){
       box = document.createElement("div");
       box.id = "ScrollProbe";
+      // keep it just beneath the indicator
+      box.style.zIndex = "2147483646";
       document.body.appendChild(box);
     }
     return box;
@@ -372,13 +374,13 @@
     var dy   = y - lastY;
     var v    = (dy / dt * 1000);
 
-    // ===== NEW: push-down indicator follows scroll (downwards) =====
+    // ===== push-down indicator follows scroll (downwards) =====
     var indY = (y > 0 ? Math.round(y) : 0);
     var ii = indicatorInner();
     if (ii){
       ii.style.transform = "translate(-50%, " + indY + "px)";
     }
-    window.__IndicatorY = indY; // exposed for debugging/automation
+    window.__IndicatorY = indY;
 
     // Existing diagnostics
     var dc  = window.DrawersController || null;
@@ -402,7 +404,7 @@
       "y: " + Math.round(y) + "px  [" + best.source + "]",
       "dy: " + Math.round(dy) + "px  (" + v.toFixed(1) + " px/s)",
       "",
-      "Indicator: " + indY + "px",            // 👈 added line
+      "Indicator: " + indY + "px",
       "",
       "tabMode: " + tabMode,
       "barBottom: " + barBottom + "px",
