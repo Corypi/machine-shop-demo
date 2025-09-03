@@ -1,32 +1,48 @@
 (function(){
   "use strict";
 
+  // ==========================================================
+  // TabBarController
+  // - Builds a progressive TabBar that mirrors [data-drawer] sections.
+  // - Delegates open/scroll behavior to DrawersController when available.
+  // - Keeps the CSS variable --TabBarOffsetPixels in sync with the bar's
+  //   actual height so snapping via scroll-margin-top is exact.
+  // ==========================================================
+
   function TabBarController(){
-    this._elBar   = document.getElementById("TabBar");
-    this._track   = document.getElementById("TabBarTrack");
-    this._tabs    = new Map(); // id -> button
-    this._order   = [];        // drawer id order
-    this._heroId  = null;      // first (hero) drawer id
-    this._active  = null;
+    this._elBar         = document.getElementById("TabBar");
+    this._track         = document.getElementById("TabBarTrack");
+    this._tabs          = new Map(); // id -> button
+    this._order         = [];        // drawer id order
+    this._heroId        = null;      // first (hero) drawer id
+    this._active        = null;
     this._heroCollapsed = false;
 
-    if (!this._elBar || !this._track) return;
+    if (!this._elBar || !this._track) { return; }
 
     this._buildFromDrawers();
     this._wire();
     this._applyVisibility(this._active);
+    this._updateTabBarOffsetVar(); // initialize CSS offset
   }
 
+  // ---------- Internal: CSS var sync for snap offset ----------
+  TabBarController.prototype._updateTabBarOffsetVar = function(){
+    var h = this._elBar ? Math.round(this._elBar.getBoundingClientRect().height || 0) : 0;
+    document.documentElement.style.setProperty("--TabBarOffsetPixels", h + "px");
+  };
+
+  // ---------- Build tabs from drawers ----------
   TabBarController.prototype._buildFromDrawers = function(){
     this._tabs.clear();
     this._order = [];
     this._track.innerHTML = "";
 
     var drawers = document.querySelectorAll("[data-drawer]");
-    for (var i=0; i<drawers.length; i++){
+    for (var i = 0; i < drawers.length; i++){
       var d = drawers[i];
-      var id = d.id || ("drawer-"+i);
-      if (!d.id) d.id = id;
+      var id = d.id || ("drawer-" + i);
+      if (!d.id) { d.id = id; }
       this._order.push(id);
 
       var titleEl = d.querySelector("[data-drawer-summary]") || d;
@@ -42,6 +58,7 @@
       tab.textContent = title;
       tab.style.display = "none";
       tab.addEventListener("click", this._onTabClick.bind(this));
+
       this._track.appendChild(tab);
       this._tabs.set(id, tab);
     }
@@ -54,53 +71,61 @@
     this._renderTabsVisibility();
   };
 
+  // ---------- Events / wiring ----------
   TabBarController.prototype._wire = function(){
     var self = this;
 
-document.addEventListener("hero:collapsed", (e) => {
-  this._heroCollapsed = true;
-  // once hero is gone, make sure the bar is visible and tabs re-render
-  document.body.classList.add("Tabs--Visible");
-  if (this._elBar) this._elBar.setAttribute("aria-hidden","false");
-  this._renderTabsVisibility();
-});
+    // Keep CSS var updated on resize/orientation changes
+    window.addEventListener("resize", function(){
+      self._updateTabBarOffsetVar();
+    }, { passive: true });
 
-    // Drawers tells us when a drawer opens; we just reflect it.
+    // Reflect drawer open events into the TabBar (active state, visibility)
     document.addEventListener("drawer:opened", function(e){
       if (e && e.detail && e.detail.id){
         self.setActive(e.detail.id);
         self._applyVisibility(e.detail.id);
         self._renderTabsVisibility();
+        self._updateTabBarOffsetVar();
       }
     });
 
-    // Single source of truth: Drawers collapses hero and tells us.
+    // When hero is collapsed by DrawersController, show bar and refresh
     document.addEventListener("hero:collapsed", function(){
       self._heroCollapsed = true;
+      document.body.classList.add("Tabs--Visible");
+      if (self._elBar) { self._elBar.setAttribute("aria-hidden","false"); }
       self._renderTabsVisibility();
       self._applyVisibility(self._active);
+      self._updateTabBarOffsetVar();
     });
   };
 
+  // ---------- Tab click -> delegate to DrawersController ----------
   TabBarController.prototype._onTabClick = function(evt){
     var id = evt.currentTarget.getAttribute("data-tab-target");
-    if (!id) return;
+    if (!id) { return; }
 
     this.setActive(id);
     this._applyVisibility(id);
     this._renderTabsVisibility();
+    this._updateTabBarOffsetVar();
 
+    // Prefer unified programmatic path (will open + snap robustly)
     if (window.DrawersController && typeof window.DrawersController.OpenThenCloseAndScroll === "function"){
       window.DrawersController.OpenThenCloseAndScroll(id, "");
-    } else {
-      var el = document.getElementById(id);
-      if (el){
-        var y = el.getBoundingClientRect().top + window.pageYOffset - 56;
-        window.scrollTo({ top: y, behavior: "smooth" });
-      }
+      return;
+    }
+
+    // Fallback: native snap using scroll-margin-top
+    var el = document.getElementById(id);
+    if (el){
+      var title = el.querySelector("[data-drawer-summary]") || el;
+      title.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" });
     }
   };
 
+  // ---------- Show/hide TabBar ----------
   TabBarController.prototype._applyVisibility = function(activeId){
     var shouldShow = !!activeId && activeId !== this._heroId;
 
@@ -109,20 +134,17 @@ document.addEventListener("hero:collapsed", (e) => {
     if (this._elBar){
       this._elBar.setAttribute("aria-hidden", shouldShow ? "false" : "true");
     }
-
-    // IMPORTANT: we no longer hide the hero here.
-    // Drawers does it and emits 'hero:collapsed'.
   };
 
-  // 🔑 Only show tabs up to (and including) the active index.
+  // ---------- Render: only show tabs up to (and including) the active ----------
   TabBarController.prototype._renderTabsVisibility = function(){
     var activeIdx = this._order.indexOf(this._active);
-    if (activeIdx < 0) activeIdx = 0;
+    if (activeIdx < 0) { activeIdx = 0; }
 
-    for (var i=0; i<this._order.length; i++){
+    for (var i = 0; i < this._order.length; i++){
       var id = this._order[i];
       var t = this._tabs.get(id);
-      if (!t) continue;
+      if (!t) { continue; }
 
       // Hide the hero tab until hero is truly collapsed
       if (id === this._heroId && !this._heroCollapsed){
@@ -135,15 +157,18 @@ document.addEventListener("hero:collapsed", (e) => {
     }
   };
 
+  // ---------- Active state management ----------
   TabBarController.prototype.setActive = function(id){
-    if (!this._tabs.size) return;
+    if (!this._tabs.size) { return; }
 
     if (this._active && this._tabs.has(this._active)){
       var prev = this._tabs.get(this._active);
       prev.classList.remove("Tab--Active");
       prev.setAttribute("aria-selected","false");
     }
+
     this._active = id;
+
     if (this._tabs.has(id)){
       var cur = this._tabs.get(id);
       cur.classList.add("Tab--Active");
@@ -151,10 +176,11 @@ document.addEventListener("hero:collapsed", (e) => {
     }
 
     var seenActive = false;
-    for (var i=0; i<this._order.length; i++){
+    for (var i = 0; i < this._order.length; i++){
       var cid = this._order[i];
       var t = this._tabs.get(cid);
-      if (!t) continue;
+      if (!t) { continue; }
+
       if (!seenActive){
         t.classList.add("Tab--Past");
       }
@@ -169,9 +195,9 @@ document.addEventListener("hero:collapsed", (e) => {
     this._renderTabsVisibility();
   };
 
-  // Boot
+  // ---------- Boot ----------
   function init(){
-    if (window.TabBar && window.TabBar._elBar) return;
+    if (window.TabBar && window.TabBar._elBar) { return; }
     window.TabBar = new TabBarController();
   }
 
