@@ -178,59 +178,109 @@
   })();
   </script>
 
-  <!-- Right scroll probe (kept for diagnostics) -->
-  <script>
-  (function(){
-    var box, lastY = window.pageYOffset || 0, lastT = (window.performance && performance.now) ? performance.now() : Date.now();
-    function ensureBox(){
-      if (!box){
-        box = document.createElement("div");
-        box.id = "ScrollProbe";
-        document.body.appendChild(box);
+  <!-- Right scroll probe (replaced) -->
+<script>
+(function(){
+  "use strict";
+
+  // --- helpers ---
+  function getNow(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function getScrollY(){
+    // Use the scrollingElement for maximum reliability across browsers
+    var se = document.scrollingElement || document.documentElement || document.body;
+    return (typeof window.scrollY === "number" ? window.scrollY : se.scrollTop) || 0;
+  }
+  function ensureBox(){
+    var box = document.getElementById("ScrollProbe");
+    if (!box){
+      box = document.createElement("div");
+      box.id = "ScrollProbe";
+      document.body.appendChild(box);
+    }
+    return box;
+  }
+  function getTabBarBottom(){
+    var bar = document.getElementById("TabBar");
+    if (!bar) return 0;
+    var r = bar.getBoundingClientRect();
+    return Math.round(r.bottom || 0);
+  }
+  function readCssVarPx(name){
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    var num = parseFloat(v);
+    return isFinite(num) ? Math.round(num) : 0;
+  }
+
+  // Track the last opened drawer id for context
+  var lastOpenedId = null;
+  document.addEventListener("drawer:opened", function(e){
+    if (e && e.detail && e.detail.id){ lastOpenedId = e.detail.id; }
+  });
+  // also record initial state if Intro opens on boot
+  document.addEventListener("DOMContentLoaded", function(){
+    var open = document.querySelector(".Drawer.Drawer--Open");
+    if (open && open.id) lastOpenedId = open.id;
+  });
+
+  var box = null;
+  var lastY = getScrollY();
+  var lastT = getNow();
+
+  function tick(){
+    box = ensureBox();
+
+    var now = getNow();
+    var y   = getScrollY();
+    var dt  = Math.max(1, now - lastT);
+    var dy  = y - lastY;
+    var v   = (dy / dt * 1000); // px/s
+
+    // Light-touch integration with controller (safe: may be undefined)
+    var dc  = window.DrawersController || null;
+    var isAnimating = !!(dc && dc._isAnimating);
+
+    // Tab mode + snap offsets
+    var tabMode   = document.body.classList.contains("Tabs--Visible");
+    var barBottom = getTabBarBottom();
+    var cssOffset = readCssVarPx("--TabBarOffsetPixels");
+
+    // Active drawer title distance from TabBar (helps verify snap)
+    var activeTopDelta = "—";
+    if (lastOpenedId){
+      var active = document.getElementById(lastOpenedId);
+      if (active){
+        var title = active.querySelector("[data-drawer-summary]") || active;
+        var tr = title.getBoundingClientRect();
+        activeTopDelta = Math.round(tr.top - barBottom) + "px";
       }
     }
-    function formatMs(ms){ return (ms > 0) ? Math.round(ms) + "ms" : "0ms"; }
-    function tick(){
-      ensureBox();
-      var now = (window.performance && performance.now) ? performance.now() : Date.now();
-      var y   = window.pageYOffset || document.documentElement.scrollTop || 0;
-      var dt  = Math.max(1, now - lastT);
-      var dy  = y - lastY;
-      var v   = (dy / dt * 1000).toFixed(1); // px/s
-      var dc  = window.DrawersController || null;
-      var acc = dc && typeof dc._accumulatedInput === "number" ? Math.round(dc._accumulatedInput) : "—";
-      var fzn = dc && typeof dc._isFrozen === "function" ? dc._isFrozen() : false;
-      var blc = dc && typeof dc._blockScroll === "boolean" ? dc._blockScroll : false;
-      var anim= dc && typeof dc._isAnimating === "boolean" ? dc._isAnimating : false;
-      var dir = dc && typeof dc._scrollDirection === "number" ? (dc._scrollDirection > 0 ? "down" : (dc._scrollDirection < 0 ? "up" : "—")) : "—";
-      var last= dc && typeof dc._lastScrollY === "number" ? Math.round(dc._lastScrollY) : "—";
-      var sup = dc && typeof dc._suppressIOUntil === "number" ? Math.max(0, Math.round(dc._suppressIOUntil - ((window.performance && performance.now) ? performance.now() : Date.now()))) : 0;
-      var frz = dc && typeof dc._freezeUntil === "number" ? Math.max(0, Math.round(dc._freezeUntil  - ((window.performance && performance.now) ? performance.now() : Date.now()))) : 0;
-      var thr = (dc && typeof dc._threshold === "function") ? Math.round(dc._threshold()) : "—";
-      var lines = [
-        "=== Scroll Probe ===",
-        "y: " + Math.round(y) + "px",
-        "dy: " + Math.round(dy) + "px  (" + v + " px/s)",
-        "",
-        "accumulatedInput: " + acc + (thr !== "—" ? " / thr " + thr : ""),
-        "direction: " + dir,
-        "lastScrollY: " + last,
-        "isAnimating: " + anim,
-        "freeze(ms left): " + formatMs(frz),
-        "suppressIO(ms): " + formatMs(sup),
-        "blockScroll: " + blc
-      ];
-      box.textContent = lines.join("\n");
-      lastY = y; lastT = now;
-      requestAnimationFrame(tick);
-    }
-    if (document.readyState === "loading"){
-      document.addEventListener("DOMContentLoaded", function(){ requestAnimationFrame(tick); });
-    } else {
-      requestAnimationFrame(tick);
-    }
-  })();
-  </script>
+
+    var lines = [
+      "=== Scroll Probe ===",
+      "y: " + Math.round(y) + "px",
+      "dy: " + Math.round(dy) + "px  (" + v.toFixed(1) + " px/s)",
+      "",
+      "tabMode: " + tabMode,
+      "barBottom: " + barBottom + "px",
+      "--TabBarOffsetPixels: " + cssOffset + "px",
+      "activeDrawer: " + (lastOpenedId || "—"),
+      "active title vs bar: " + activeTopDelta,
+      "",
+      "isAnimating: " + isAnimating
+    ];
+
+    box.textContent = lines.join("\n");
+    lastY = y; lastT = now;
+    requestAnimationFrame(tick);
+  }
+
+  if (document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){ requestAnimationFrame(tick); });
+  } else {
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
 
   <!-- Noscript notice to keep UX understandable if JS is disabled -->
   <noscript>
