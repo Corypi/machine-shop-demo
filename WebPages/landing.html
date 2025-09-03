@@ -178,18 +178,37 @@
   })();
   </script>
 
-  <!-- Right scroll probe (replaced) -->
+<!-- Right scroll probe (robust) -->
 <script>
 (function(){
   "use strict";
 
-  // --- helpers ---
-  function getNow(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  // ——— Robust scroll position reader ———
   function getScrollY(){
-    // Use the scrollingElement for maximum reliability across browsers
-    var se = document.scrollingElement || document.documentElement || document.body;
-    return (typeof window.scrollY === "number" ? window.scrollY : se.scrollTop) || 0;
+    // 1) Primary
+    if (typeof window.scrollY === "number") { return window.scrollY || 0; }
+    if (typeof window.pageYOffset === "number") { return window.pageYOffset || 0; }
+
+    // 2) Scrolling element fallbacks
+    var se = document.scrollingElement;
+    if (se && typeof se.scrollTop === "number") { return se.scrollTop || 0; }
+
+    // 3) Root fallbacks
+    var de = document.documentElement;
+    if (de && typeof de.scrollTop === "number") { return de.scrollTop || 0; }
+    var bo = document.body;
+    if (bo && typeof bo.scrollTop === "number") { return bo.scrollTop || 0; }
+
+    // 4) Mobile Safari weirdness: sometimes visualViewport moves while scrollTops read 0
+    if (window.visualViewport && typeof window.visualViewport.pageTop === "number") {
+      return Math.max(0, Math.round(window.visualViewport.pageTop));
+    }
+
+    return 0;
   }
+
+  function getNow(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+
   function ensureBox(){
     var box = document.getElementById("ScrollProbe");
     if (!box){
@@ -199,24 +218,25 @@
     }
     return box;
   }
+
   function getTabBarBottom(){
     var bar = document.getElementById("TabBar");
     if (!bar) return 0;
     var r = bar.getBoundingClientRect();
     return Math.round(r.bottom || 0);
   }
+
   function readCssVarPx(name){
     var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     var num = parseFloat(v);
     return isFinite(num) ? Math.round(num) : 0;
   }
 
-  // Track the last opened drawer id for context
+  // Track last opened drawer id (for snap diagnostics)
   var lastOpenedId = null;
   document.addEventListener("drawer:opened", function(e){
     if (e && e.detail && e.detail.id){ lastOpenedId = e.detail.id; }
   });
-  // also record initial state if Intro opens on boot
   document.addEventListener("DOMContentLoaded", function(){
     var open = document.querySelector(".Drawer.Drawer--Open");
     if (open && open.id) lastOpenedId = open.id;
@@ -225,6 +245,10 @@
   var box = null;
   var lastY = getScrollY();
   var lastT = getNow();
+
+  // Also listen to scroll events to force refresh in browsers that throttle rAF during momentum scroll
+  var forceRefresh = false;
+  window.addEventListener("scroll", function(){ forceRefresh = true; }, { passive:true });
 
   function tick(){
     box = ensureBox();
@@ -235,16 +259,13 @@
     var dy  = y - lastY;
     var v   = (dy / dt * 1000); // px/s
 
-    // Light-touch integration with controller (safe: may be undefined)
     var dc  = window.DrawersController || null;
     var isAnimating = !!(dc && dc._isAnimating);
 
-    // Tab mode + snap offsets
     var tabMode   = document.body.classList.contains("Tabs--Visible");
     var barBottom = getTabBarBottom();
     var cssOffset = readCssVarPx("--TabBarOffsetPixels");
 
-    // Active drawer title distance from TabBar (helps verify snap)
     var activeTopDelta = "—";
     if (lastOpenedId){
       var active = document.getElementById(lastOpenedId);
@@ -271,7 +292,14 @@
 
     box.textContent = lines.join("\n");
     lastY = y; lastT = now;
-    requestAnimationFrame(tick);
+
+    // If a scroll event fired, run the next frame ASAP
+    if (forceRefresh){
+      forceRefresh = false;
+      requestAnimationFrame(tick);
+    } else {
+      requestAnimationFrame(tick);
+    }
   }
 
   if (document.readyState === "loading"){
