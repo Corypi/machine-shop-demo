@@ -31,7 +31,8 @@
 
     // Wait until TabBar/padding/layout are stable (2 identical frames or timeout)
     function WaitStable(callback){
-      var start = (window.performance && performance.now) ? performance.now() : Date.now();
+      var nowTs = (window.performance && performance.now) ? function(){ return performance.now(); } : function(){ return Date.now(); };
+      var start = nowTs();
       var prevSig = null, stableCount = 0;
 
       function frame(){
@@ -46,8 +47,7 @@
 
         if (stableCount >= ConsecutiveStableFrames) { callback(); return; }
 
-        var now = (window.performance && performance.now) ? performance.now() : Date.now();
-        if (now - start > MaxWaitMs) { callback(); return; }
+        if (nowTs() - start > MaxWaitMs) { callback(); return; }
 
         requestAnimationFrame(frame);
       }
@@ -113,7 +113,7 @@
     this.Initialize();
   }
 
-  // ---------- Helpers: hero + TabBar ----------
+  // ---------- Helpers: hero + TabBar + Tab-Mode visibility ----------
 
   DrawerController.prototype._heroId = function(){
     if (!this._drawers || !this._drawers.length) return null;
@@ -122,6 +122,32 @@
 
   DrawerController.prototype._tabBarEl = function(){
     return document.getElementById("TabBar");
+  };
+
+  DrawerController.prototype._isTabMode = function(){
+    // "Tab mode" means the fixed TabBar is visible.
+    return document.body.classList.contains("Tabs--Visible");
+  };
+
+  // Hide all drawers except the active one (tab mode only).
+  // In non-tab mode, keep legacy behavior (all visible in flow).
+  DrawerController.prototype._applyTabModeVisibility = function(activeId){
+    var inTabMode = this._isTabMode();
+    for (var i = 0; i < this._drawers.length; i++){
+      var d = this._drawers[i];
+      if (!inTabMode){
+        d.removeAttribute("hidden");
+        d.style.display = "";
+        continue;
+      }
+      if (d.id === activeId){
+        d.removeAttribute("hidden");
+        d.style.display = "";
+      } else {
+        d.setAttribute("hidden", "");
+        d.style.display = "none";
+      }
+    }
   };
 
   DrawerController.prototype._ensureTabBarVisible = function(){
@@ -191,6 +217,21 @@
 
     // Keep TabBar offset var fresh on resize/orientation
     window.addEventListener("resize", function(){ SnapManager.UpdateTabBarOffsetVar(); }, { passive: true });
+
+    // Enforce tab-mode visibility whenever a drawer actually opens.
+    var self = this;
+    document.addEventListener("drawer:opened", function(e){
+      if (e && e.detail && e.detail.id){ self._applyTabModeVisibility(e.detail.id); }
+    });
+
+    // If the page is already in tab-mode on load, keep only the active open drawer in flow.
+    if (this._isTabMode()){
+      var activeOpen = null;
+      for (var k = 0; k < this._drawers.length; k++){
+        if (this._drawers[k].classList.contains("Drawer--Open")) { activeOpen = this._drawers[k].id; break; }
+      }
+      if (activeOpen){ this._applyTabModeVisibility(activeOpen); }
+    }
   };
 
   // ---------- Interaction ----------
@@ -243,7 +284,8 @@
         }
       }
 
-      // Unified, robust snap: wait for a stable layout, then scroll to title.
+      // Unified, robust snap: ensure offset reflects current bar size, wait for stability, then scroll to title.
+      SnapManager.UpdateTabBarOffsetVar();
       var self3 = this;
       SnapManager.WaitStable(function(){ self3.ScrollToDrawer(drawer.id); });
     }
@@ -356,8 +398,11 @@
     drawer.dataset.lockedUntil = String(this._now() + SuppressMsAfterProgrammaticClose);
   };
 
+  // Close siblings; in tab-mode, also fully hide them from flow.
   DrawerController.prototype.CloseSiblings = function (exceptDrawer, removeHero) {
     var heroId = this._heroId();
+    var inTabMode = this._isTabMode();
+
     for (var i = 0; i < this._drawers.length; i++) {
       var d = this._drawers[i];
       if (d === exceptDrawer) continue;
@@ -375,9 +420,14 @@
         continue;
       }
 
-      // 3) all non-hero siblings remain visible in flow
-      d.removeAttribute("hidden");
-      d.style.display = "";
+      // 3) visibility policy
+      if (inTabMode) {
+        d.setAttribute("hidden", "");
+        d.style.display = "none";
+      } else {
+        d.removeAttribute("hidden");
+        d.style.display = "";
+      }
     }
   };
 
@@ -570,7 +620,8 @@
       }
     }
 
-    // Unified snap after open
+    // Unified snap after open: sync offset, wait stable, then scroll.
+    SnapManager.UpdateTabBarOffsetVar();
     var self3 = this;
     SnapManager.WaitStable(function(){ self3.ScrollToDrawer(id); });
   };
@@ -602,6 +653,7 @@
       function onOpened(e){
         if (!e || !e.detail || e.detail.id !== openId) return;
         document.removeEventListener("drawer:opened", onOpened);
+        SnapManager.UpdateTabBarOffsetVar();
         SnapManager.WaitStable(function(){
           self.ScrollToDrawer(openId);
         });
