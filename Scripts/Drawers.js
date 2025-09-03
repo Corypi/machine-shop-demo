@@ -628,39 +628,82 @@
   };
 
   // --- Optional: auto-advance a video drawer ---
-  DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId) {
-    var drawer = document.getElementById(drawerId);
-    if (!drawer) return;
-    var content = drawer.querySelector("[data-drawer-content]");
-    var video   = content ? content.querySelector("video") : null;
-    if (!video) return;
+  // --- Auto-advance a video drawer, with optional soft-trim cutoff ---
+DrawerController.prototype._wireAutoAdvanceVideo = function (drawerId, nextId, options) {
+  var cutoffSeconds = options && typeof options.cutoffSeconds === "number" ? Math.max(0, options.cutoffSeconds) : null;
 
-    var self = this;
-    var started = false;
+  var drawer = document.getElementById(drawerId);
+  if (!drawer) return;
+  var content = drawer.querySelector("[data-drawer-content]");
+  var video   = content ? content.querySelector("video") : null;
+  if (!video) return;
 
-    function tryPlay() {
-      try {
-        video.muted = true;
-        video.playsInline = true;
-        var p = video.play();
-        if (p && typeof p.catch === "function") p.catch(function(){});
-      } catch(e) {}
+  var self = this;
+  var started = false;
+  var cleaned = false;
+
+  function tryPlay() {
+    try {
+      video.muted = true;
+      video.playsInline = true;
+      var p = video.play();
+      if (p && typeof p.catch === "function") p.catch(function(){});
+    } catch(e) {}
+  }
+
+  function cleanup() {
+    if (cleaned) return;
+    cleaned = true;
+    video.removeEventListener("playing", onPlaying);
+    video.removeEventListener("loadedmetadata", onLoadedMeta);
+    video.removeEventListener("timeupdate", onTimeUpdate);
+    video.removeEventListener("ended", onEnded);
+  }
+
+  function advanceIfVisible() {
+    // Only advance if the source drawer is still open (user might have clicked elsewhere)
+    if (!drawer.classList.contains("Drawer--Open")) return;
+    cleanup();
+    if (nextId) {
+      self.OpenThenCloseAndScroll(nextId, drawerId);
+    } else {
+      self.CloseAndLock(drawer);
     }
+  }
 
-    video.addEventListener("playing", function () { started = true; }, { passive:true });
-    video.addEventListener("loadedmetadata", function () { tryPlay(); }, { passive:true });
+  function onPlaying(){ started = true; }
+  function onLoadedMeta(){
+    // If we have a cutoff beyond the actual duration, clamp it
+    if (cutoffSeconds != null && isFinite(video.duration) && video.duration > 0) {
+      cutoffSeconds = Math.min(cutoffSeconds, video.duration);
+    }
+    tryPlay();
+  }
 
-    video.addEventListener("ended", function () {
-      if (!started) return;
-      if (!drawer.classList.contains("Drawer--Open")) return;
+  function onTimeUpdate(){
+    if (cutoffSeconds == null) return;
+    if (video.currentTime >= cutoffSeconds) {
+      try { video.pause(); } catch(_) {}
+      advanceIfVisible();
+    }
+  }
 
-      if (nextId) {
-        self.OpenThenCloseAndScroll(nextId, drawerId);
-      } else {
-        self.CloseAndLock(drawer);
-      }
-    }, { passive:true });
-  };
+  function onEnded(){
+    if (!started) return;
+    // If we didn’t soft-trim, use the natural ended event
+    if (cutoffSeconds == null) {
+      advanceIfVisible();
+    }
+  }
+
+  video.addEventListener("playing", onPlaying, { passive:true });
+  video.addEventListener("loadedmetadata", onLoadedMeta, { passive:true });
+  video.addEventListener("timeupdate", onTimeUpdate, { passive:true });
+  video.addEventListener("ended", onEnded, { passive:true });
+
+  // Kick things off in case metadata is already available
+  if (video.readyState >= 1) { onLoadedMeta(); } else { tryPlay(); }
+};
 
   // ---------- Public helpers ----------
 
@@ -804,7 +847,8 @@ function PrimeMarkedVideos(){
       }
 
       // Wire auto-advance for the intro video to "About"
-      instance._wireAutoAdvanceVideo("Intro", "Tour");
+      // Auto-advance from Intro to Tour after ~25s (even if the file is longer)
+instance._wireAutoAdvanceVideo("Intro", "Tour", { cutoffSeconds: 21 });
 
       // Initial autoplay safety pass (in case readyState is already good)
       instance._autoplayVideos(intro);
