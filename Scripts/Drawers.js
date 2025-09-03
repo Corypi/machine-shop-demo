@@ -848,7 +848,7 @@ function PrimeMarkedVideos(){
 
       // Wire auto-advance for the intro video to "About"
       // Auto-advance from Intro to Tour after ~25s (even if the file is longer)
-instance._wireAutoAdvanceVideo("Intro", "Tour", { cutoffSeconds: 21 });
+instance._wireAutoAdvanceVideo("Intro", "Tour", { cutoffSeconds: 20 });
 
       // Initial autoplay safety pass (in case readyState is already good)
       instance._autoplayVideos(intro);
