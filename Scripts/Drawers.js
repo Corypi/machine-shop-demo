@@ -63,50 +63,54 @@
     }
   };
 
-// Snap under the TabBar using absolute document Y (no offsetTop pitfalls)
-DrawerController.prototype._snapUnderTabs = function(drawer){
-  if (!drawer) return;
-  var title = drawer.querySelector("[data-drawer-summary]") || drawer;
-  var rectTop = title.getBoundingClientRect().top;
-  var targetY = rectTop + (window.pageYOffset || document.documentElement.scrollTop || 0) - this._tabBarHeight();
+  // —— NEW: exact snap by rect-difference (title.top -> tabbar.bottom) ——
+  DrawerController.prototype._snapUnderTabs = function(drawer){
+    if (!drawer) return;
+    var bar = this._tabBarEl();
+    var title = drawer.querySelector("[data-drawer-summary]") || drawer;
 
-  // do it twice to absorb late layout (fonts/video/media)
-  window.scrollTo({ top: targetY, behavior: "auto" });
-  requestAnimationFrame(function(){
-    window.scrollTo({ top: targetY, behavior: "auto" });
-  });
-};
-
-// Wait until TabBar is visible and Container padding-top is applied, then snap
-DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
-  var self = this, tries = 0, maxTries = 60;
-
-  function ready(){
-    if (!document.body.classList.contains("Tabs--Visible")) return false;
-    var bar = self._tabBarEl();
-    if (!bar) return false;
-    var h = bar.getBoundingClientRect().height || 0;
-    if (h < 1) return false;
-
-    var container = document.querySelector(".Container");
-    if (!container) return true;
-    var pt = parseFloat(getComputedStyle(container).paddingTop) || 0;
-    return pt >= h - 1;
-  }
-
-  (function loop(){
-    if (ready()){
-      // one more style tick then snap
-      requestAnimationFrame(function(){ self._snapUnderTabs(drawer); });
-      return;
+    function snapOnce(){
+      var barB   = bar ? bar.getBoundingClientRect().bottom : 0;
+      var titleT = title.getBoundingClientRect().top;
+      var delta  = Math.round(titleT - barB);
+      if (delta) window.scrollBy({ top: delta, behavior: "auto" });
     }
-    if (++tries >= maxTries){
-      self._snapUnderTabs(drawer); // best effort fallback
-      return;
+
+    // Do it twice to absorb any late layout shifts (fonts/video/etc.)
+    snapOnce();
+    requestAnimationFrame(snapOnce);
+  };
+
+  // —— NEW: defer until layout is stable enough, then rect-diff snap ——
+  DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
+    var self = this, tries = 0, maxTries = 60;
+
+    function ready(){
+      // TabBar visible and measurable?
+      var bar = self._tabBarEl();
+      if (!bar) return false;
+      var h = bar.getBoundingClientRect().height || 0;
+      if (h < 1) return false;
+
+      // If Container padding-top is used to offset the bar, ensure it's applied.
+      var container = document.querySelector(".Container");
+      if (!container) return true;
+      var pt = parseFloat(getComputedStyle(container).paddingTop) || 0;
+      return pt >= h - 1;
     }
-    requestAnimationFrame(loop);
-  })();
-};
+
+    (function loop(){
+      if (ready()){
+        requestAnimationFrame(function(){ self._snapUnderTabs(drawer); });
+        return;
+      }
+      if (++tries >= maxTries){
+        self._snapUnderTabs(drawer); // best-effort fallback
+        return;
+      }
+      requestAnimationFrame(loop);
+    })();
+  };
 
   // Instantly remove a drawer from layout (no animation)
   DrawerController.prototype._forceRemoveFromFlow = function(drawer){
@@ -215,8 +219,9 @@ DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
         }
       }
 
-      // snap once TabBar/padding are ready
-      this._snapUnderTabsDeferred(drawer);
+      // snap after the open settles on next frame
+      var self3 = this;
+      requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
     }
   };
 
@@ -538,13 +543,13 @@ DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
         if (this._isAnimating) {
           this._enqueue(function(){ self2.CloseSiblings(drawer, /*removeHero*/true); });
         } else {
-          this.CloseSiblings(drawer, /*removeHero*/true);
+          self2.CloseSiblings(drawer, /*removeHero*/true);
         }
       }
     }
 
-    // wait for TabBar readiness then snap
-    this._snapUnderTabsDeferred(drawer);
+    var self3 = this;
+    requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
   };
 
   DrawerController.prototype.CloseById = function (id) {
@@ -553,10 +558,24 @@ DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
     if (drawer.classList.contains("Drawer--Open")) this.CloseAndLock(drawer);
   };
 
+  // —— NEW: scroll by rect-diff for consistency everywhere ——
   DrawerController.prototype.ScrollToDrawer = function (id) {
     var drawer = document.getElementById(id);
     if (!drawer) return;
-    this._snapUnderTabsDeferred(drawer);
+    var title = drawer.querySelector("[data-drawer-summary]") || drawer;
+    var bar   = this._tabBarEl();
+
+    var barB   = bar ? bar.getBoundingClientRect().bottom : 0;
+    var titleT = title.getBoundingClientRect().top;
+    var delta  = Math.round(titleT - barB);
+
+    if (delta) window.scrollBy({ top: delta, behavior: "auto" });
+    requestAnimationFrame(() => {
+      var barB2   = bar ? bar.getBoundingClientRect().bottom : 0;
+      var titleT2 = title.getBoundingClientRect().top;
+      var delta2  = Math.round(titleT2 - barB2);
+      if (delta2) window.scrollBy({ top: delta2, behavior: "auto" });
+    });
   };
 
   DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
@@ -570,12 +589,16 @@ DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
       }
       this._ensureTabBarVisible();
 
-      // 2) Next frame: open target and snap (with readiness)
+      // 2) Next frame: open target
       var self = this;
       requestAnimationFrame(function(){
         self.OpenById(openId);
-        var target = document.getElementById(openId);
-        self._snapUnderTabsDeferred(target);
+
+        // 3) Next frame: snap under bar (after open/layout settles)
+        requestAnimationFrame(function(){
+          var target = document.getElementById(openId);
+          self._snapUnderTabs(target);
+        });
       });
       return;
     }
@@ -583,8 +606,11 @@ DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
     // Non-hero path
     if (closeId) this.CloseById(closeId);
     this.OpenById(openId);
-    var t2 = document.getElementById(openId);
-    this._snapUnderTabsDeferred(t2);
+    var self2 = this;
+    requestAnimationFrame(function(){
+      var t2 = document.getElementById(openId);
+      self2._snapUnderTabs(t2);
+    });
   };
 
   // ---------- Boot ----------
