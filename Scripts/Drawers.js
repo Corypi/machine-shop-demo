@@ -1,6 +1,81 @@
 (function () {
   "use strict";
 
+  // ==========================================================
+  // SnapManager
+  // Single, boringly-reliable snapping primitive used everywhere.
+  // Relies on CSS `scroll-margin-top: var(--TabBarOffsetPixels)` set
+  // on drawer titles (see main.css). We only:
+  //  1) keep --TabBarOffsetPixels in sync with TabBar height,
+  //  2) wait briefly for a stable layout,
+  //  3) call scrollIntoView, then verify & nudge by a pixel if needed.
+  // ==========================================================
+  var SnapManager = (function(){
+    var MaxWaitMs = 500;              // Hard cap to avoid hanging forever
+    var ConsecutiveStableFrames = 2;  // Frames with identical measurements
+
+    function _tabBar(){ return document.getElementById("TabBar"); }
+    function _container(){ return document.querySelector(".Container"); }
+    function _titleOf(drawer){ return drawer.querySelector("[data-drawer-summary]") || drawer; }
+
+    function _barBottom(){
+      var bar = _tabBar();
+      return bar ? Math.round(bar.getBoundingClientRect().bottom) : 0;
+    }
+
+    // Keep the CSS variable in sync with actual TabBar height
+    function UpdateTabBarOffsetVar(){
+      var px = _barBottom();
+      document.documentElement.style.setProperty("--TabBarOffsetPixels", px + "px");
+    }
+
+    // Wait until TabBar/padding/layout are stable (2 identical frames or timeout)
+    function WaitStable(callback){
+      var start = (window.performance && performance.now) ? performance.now() : Date.now();
+      var prevSig = null, stableCount = 0;
+
+      function frame(){
+        var barBtm = _barBottom();
+        var cont = _container();
+        var pt = cont ? Math.round(parseFloat(getComputedStyle(cont).paddingTop) || 0) : 0;
+        var vis = document.body.classList.contains("Tabs--Visible") ? 1 : 0;
+        var sig = barBtm + "|" + pt + "|" + vis;
+
+        stableCount = (prevSig !== null && sig === prevSig) ? (stableCount + 1) : 1;
+        prevSig = sig;
+
+        if (stableCount >= ConsecutiveStableFrames) { callback(); return; }
+
+        var now = (window.performance && performance.now) ? performance.now() : Date.now();
+        if (now - start > MaxWaitMs) { callback(); return; }
+
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+
+    // Scroll so the drawer title lands under the TabBar; verify & nudge.
+    function SnapToTitle(drawer, behavior){
+      if (!drawer) return;
+      var title = _titleOf(drawer);
+
+      // First attempt: spec-compliant; honors scroll-margin-top.
+      title.scrollIntoView({ block: "start", inline: "nearest", behavior: behavior || "auto" });
+
+      // Verify on the next frame and nudge by exact delta if needed.
+      requestAnimationFrame(function(){
+        var delta = Math.round(title.getBoundingClientRect().top - _barBottom());
+        if (delta) { window.scrollBy({ top: delta, behavior: "auto" }); }
+      });
+    }
+
+    return {
+      UpdateTabBarOffsetVar: UpdateTabBarOffsetVar,
+      WaitStable: WaitStable,
+      SnapToTitle: SnapToTitle
+    };
+  })();
+
   // ===== Configuration =====
   var AnimationDurationMs = 220;
   var OnlyOneOpenAtATime  = true;
@@ -38,7 +113,7 @@
     this.Initialize();
   }
 
-  // ---------- Helpers: hero + TabBar + snap ----------
+  // ---------- Helpers: hero + TabBar ----------
 
   DrawerController.prototype._heroId = function(){
     if (!this._drawers || !this._drawers.length) return null;
@@ -49,67 +124,13 @@
     return document.getElementById("TabBar");
   };
 
-  DrawerController.prototype._tabBarHeight = function(){
-    var el = this._tabBarEl();
-    var h = el ? el.getBoundingClientRect().height : 56;
-    return (h && h > 0) ? h : 56;
-  };
-
   DrawerController.prototype._ensureTabBarVisible = function(){
     var bar = this._tabBarEl();
     if (bar){
       document.body.classList.add("Tabs--Visible");
       bar.setAttribute("aria-hidden", "false");
+      SnapManager.UpdateTabBarOffsetVar(); // keep CSS offset in sync
     }
-  };
-
-  // —— NEW: exact snap by rect-difference (title.top -> tabbar.bottom) ——
-  DrawerController.prototype._snapUnderTabs = function(drawer){
-    if (!drawer) return;
-    var bar = this._tabBarEl();
-    var title = drawer.querySelector("[data-drawer-summary]") || drawer;
-
-    function snapOnce(){
-      var barB   = bar ? bar.getBoundingClientRect().bottom : 0;
-      var titleT = title.getBoundingClientRect().top;
-      var delta  = Math.round(titleT - barB);
-      if (delta) window.scrollBy({ top: delta, behavior: "auto" });
-    }
-
-    // Do it twice to absorb any late layout shifts (fonts/video/etc.)
-    snapOnce();
-    requestAnimationFrame(snapOnce);
-  };
-
-  // —— NEW: defer until layout is stable enough, then rect-diff snap ——
-  DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
-    var self = this, tries = 0, maxTries = 60;
-
-    function ready(){
-      // TabBar visible and measurable?
-      var bar = self._tabBarEl();
-      if (!bar) return false;
-      var h = bar.getBoundingClientRect().height || 0;
-      if (h < 1) return false;
-
-      // If Container padding-top is used to offset the bar, ensure it's applied.
-      var container = document.querySelector(".Container");
-      if (!container) return true;
-      var pt = parseFloat(getComputedStyle(container).paddingTop) || 0;
-      return pt >= h - 1;
-    }
-
-    (function loop(){
-      if (ready()){
-        requestAnimationFrame(function(){ self._snapUnderTabs(drawer); });
-        return;
-      }
-      if (++tries >= maxTries){
-        self._snapUnderTabs(drawer); // best-effort fallback
-        return;
-      }
-      requestAnimationFrame(loop);
-    })();
   };
 
   // Instantly remove a drawer from layout (no animation)
@@ -136,7 +157,7 @@
     drawer.setAttribute("hidden", "");
     drawer.style.display = "none";
 
-    // force a reflow so layout updates before we snap
+    // force a reflow so layout updates
     void document.body.offsetHeight;
 
     // 🔔 tell everyone the hero is gone
@@ -167,6 +188,9 @@
 
     this.SyncAria();
     this.SyncHeights();
+
+    // Keep TabBar offset var fresh on resize/orientation
+    window.addEventListener("resize", function(){ SnapManager.UpdateTabBarOffsetVar(); }, { passive: true });
   };
 
   // ---------- Interaction ----------
@@ -219,9 +243,9 @@
         }
       }
 
-      // snap after the open settles on next frame
+      // Unified, robust snap: wait for a stable layout, then scroll to title.
       var self3 = this;
-      requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
+      SnapManager.WaitStable(function(){ self3.ScrollToDrawer(drawer.id); });
     }
   };
 
@@ -246,7 +270,7 @@
     drawer.classList.add("Drawer--Open");
     this.SetAriaExpanded(drawer, true);
 
-    // 🔔 notify tab bar
+    // 🔔 notify tab bar / observers (opened state)
     document.dispatchEvent(new CustomEvent("drawer:opened", { detail: { id: drawer.id }}));
 
     var self = this;
@@ -259,9 +283,7 @@
       void content.offsetHeight;
 
       var end = content.getBoundingClientRect().height;
-      if (!end || end < 1) {
-        end = content.scrollHeight;
-      }
+      if (!end || end < 1) { end = content.scrollHeight; }
 
       // Restore start height for the animation
       content.style.height = prevH || (Math.max(0, startHeight) + "px");
@@ -548,8 +570,9 @@
       }
     }
 
+    // Unified snap after open
     var self3 = this;
-    requestAnimationFrame(function(){ self3._snapUnderTabs(drawer); });
+    SnapManager.WaitStable(function(){ self3.ScrollToDrawer(id); });
   };
 
   DrawerController.prototype.CloseById = function (id) {
@@ -558,68 +581,50 @@
     if (drawer.classList.contains("Drawer--Open")) this.CloseAndLock(drawer);
   };
 
-  // —— NEW: scroll by rect-diff for consistency everywhere ——
+  // Public scroll that uses SnapManager (kept for TabBar.js / external callers)
   DrawerController.prototype.ScrollToDrawer = function (id) {
-    var drawer = document.getElementById(id);
-    if (!drawer) return;
-    var title = drawer.querySelector("[data-drawer-summary]") || drawer;
-    var bar   = this._tabBarEl();
-
-    var barB   = bar ? bar.getBoundingClientRect().bottom : 0;
-    var titleT = title.getBoundingClientRect().top;
-    var delta  = Math.round(titleT - barB);
-
-    if (delta) window.scrollBy({ top: delta, behavior: "auto" });
-    requestAnimationFrame(() => {
-      var barB2   = bar ? bar.getBoundingClientRect().bottom : 0;
-      var titleT2 = title.getBoundingClientRect().top;
-      var delta2  = Math.round(titleT2 - barB2);
-      if (delta2) window.scrollBy({ top: delta2, behavior: "auto" });
+    var el = typeof id === "string" ? document.getElementById(id) : id;
+    if (!el) return;
+    SnapManager.WaitStable(function(){
+      SnapManager.SnapToTitle(el, "auto");
     });
   };
 
-  // Replace the whole method with this:
-DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
-  var heroId = this._heroId();
-
-  // --- Hero path (Skip Intro) ---
-  if (closeId && heroId && closeId === heroId) {
-    // 1) Hide hero + show tabs immediately
-    var hero = document.getElementById(closeId);
-    if (hero && hero.style.display !== "none") {
-      this._forceRemoveFromFlow(hero);
-    }
-    this._ensureTabBarVisible();
-
-    // 2) Next frame: open target and wait until it is actually opened
+  // Programmatic sequence: open one, optionally close another, then snap.
+  DrawerController.prototype.OpenThenCloseAndScroll = function (openId, closeId) {
     var self = this;
-    requestAnimationFrame(function () {
-      // Snap only AFTER the drawer reports it's opened (transition ended)
+    var heroId = this._heroId();
+
+    function openAndSnap() {
+      self.OpenById(openId);
+
+      // After "opened", wait stable, then snap.
       function onOpened(e){
         if (!e || !e.detail || e.detail.id !== openId) return;
         document.removeEventListener("drawer:opened", onOpened);
-        var target = document.getElementById(openId);
-        // Defer snapping until TabBar + Container padding are stable
-        self._snapUnderTabsDeferred(target);
+        SnapManager.WaitStable(function(){
+          self.ScrollToDrawer(openId);
+        });
       }
       document.addEventListener("drawer:opened", onOpened);
+    }
 
-      self.OpenById(openId);
-    });
+    // If skipping the hero, remove it & show tabs first
+    if (closeId && heroId && closeId === heroId) {
+      var hero = document.getElementById(closeId);
+      if (hero && hero.style.display !== "none") {
+        this._forceRemoveFromFlow(hero);
+      }
+      this._ensureTabBarVisible();
+      SnapManager.UpdateTabBarOffsetVar();
+      requestAnimationFrame(openAndSnap);
+      return;
+    }
 
-    return;
-  }
-
-  // --- Non-hero path (regular tab clicks etc.) ---
-  if (closeId) this.CloseById(closeId);
-  this.OpenById(openId);
-
-  var self2 = this;
-  requestAnimationFrame(function(){
-    var t2 = document.getElementById(openId);
-    self2._snapUnderTabsDeferred(t2);
-  });
-};
+    // Non-hero path
+    if (closeId) this.CloseById(closeId);
+    requestAnimationFrame(openAndSnap);
+  };
 
   // ---------- Boot ----------
 
