@@ -143,40 +143,109 @@
   <script src="../Scripts/TabBar.js" defer></script>
 
   <!-- Left debug probe (kept for diagnostics) -->
-  <script>
-  (function(){
-    function probe() {
-      var intro = document.getElementById("Intro");
-      if (!intro) return;
-      var content = intro.querySelector("[data-drawer-content]");
-      var video   = intro.querySelector("video");
-      var button  = intro.querySelector(".SkipButton--Overlay");
-      var cr = content ? content.getBoundingClientRect() : null;
-      var vr = video   ? video.getBoundingClientRect()   : null;
-      var br = button  ? button.getBoundingClientRect()  : null;
-      var txt = [
-        "content bottom: " + (cr ? Math.round(cr.bottom) : "—"),
-        "video   bottom: " + (vr ? Math.round(vr.bottom) : "—"),
-        "button  bottom: " + (br ? Math.round(br.bottom) : "—"),
-        "content height: " + (cr ? Math.round(cr.height) : "—"),
-        "video   height: " + (vr ? Math.round(vr.height) : "—")
-      ].join("\n");
-      var box = document.getElementById("DebugProbe");
-      if (!box) {
-        box = document.createElement("div");
-        box.id = "DebugProbe";
-        document.body.appendChild(box);
-      }
-      box.textContent = txt;
+<!-- Left debug probe (replaced: works for any currently-open drawer) -->
+<script>
+(function(){
+  "use strict";
+
+  // Track the last opened drawer id; default to any drawer that's open on load.
+  var targetId = null;
+
+  document.addEventListener("drawer:opened", function(e){
+    if (e && e.detail && e.detail.id){ targetId = e.detail.id; }
+  });
+
+  document.addEventListener("DOMContentLoaded", function(){
+    var open = document.querySelector(".Drawer.Drawer--Open");
+    if (open && open.id){ targetId = open.id; }
+  });
+
+  function ensureBox(){
+    var box = document.getElementById("DebugProbe");
+    if (!box){
+      box = document.createElement("div");
+      box.id = "DebugProbe";
+      document.body.appendChild(box);
     }
-    ["load","resize","orientationchange","scroll"].forEach(function(ev){
-      window.addEventListener(ev, probe, {passive:true});
-    });
-    document.addEventListener("loadedmetadata", probe, true);
-    document.addEventListener("transitionend", probe, true);
-    setInterval(probe, 400);
-  })();
-  </script>
+    return box;
+  }
+
+  function rect(el){ return el ? el.getBoundingClientRect() : null; }
+  function num(n){ return (typeof n === "number" && isFinite(n)) ? Math.round(n) : "—"; }
+
+  function getBarBottom(){
+    var bar = document.getElementById("TabBar");
+    if (!bar) return 0;
+    var r = bar.getBoundingClientRect();
+    return Math.round(r.bottom || 0);
+  }
+
+  function probe(){
+    var box = ensureBox();
+
+    // If no explicit target yet, pick the first drawer element present.
+    if (!targetId){
+      var first = document.querySelector("[data-drawer]");
+      if (first && first.id){ targetId = first.id; }
+    }
+
+    var drawer  = targetId ? document.getElementById(targetId) : null;
+    var content = drawer ? drawer.querySelector("[data-drawer-content]") : null;
+    var video   = drawer ? drawer.querySelector("video") : null;
+    var button  = drawer ? drawer.querySelector(".SkipButton--Overlay") : null;
+    var title   = drawer ? (drawer.querySelector("[data-drawer-summary]") || drawer) : null;
+
+    var cr = rect(content);
+    var vr = rect(video);
+    var br = rect(button);
+    var tr = rect(title);
+    var barBtm = getBarBottom();
+
+    var lines = [];
+
+    lines.push("=== Left Probe ===");
+    lines.push("drawer: " + (drawer ? drawer.id : "—"));
+    lines.push("");
+
+    // Title vs TabBar for snap verification
+    if (tr){
+      lines.push("title top: " + num(tr.top) + "px");
+      lines.push("title vs bar: " + num(tr.top - barBtm) + "px");
+      lines.push("");
+    }
+
+    // Content block metrics
+    lines.push("content bottom: " + (cr ? num(cr.bottom) : "—"));
+    lines.push("content height: " + (cr ? num(cr.height) : "—"));
+
+    // Video metrics (only if present in this drawer)
+    lines.push("video   bottom: " + (vr ? num(vr.bottom) : "—"));
+    lines.push("video   height: " + (vr ? num(vr.height) : "—"));
+
+    // Skip button metrics (only exists in Intro)
+    lines.push("button  bottom: " + (br ? num(br.bottom) : "—"));
+
+    // Drawer state
+    var isOpen = !!(drawer && drawer.classList.contains("Drawer--Open"));
+    lines.push("");
+    lines.push("isOpen: " + isOpen);
+
+    box.textContent = lines.join("\n");
+  }
+
+  // Re-run on layout-affecting events
+  ["load","resize","orientationchange","scroll"].forEach(function(ev){
+    window.addEventListener(ev, probe, { passive:true });
+  });
+  document.addEventListener("loadedmetadata", probe, true);
+  document.addEventListener("transitionend", probe, true);
+  document.addEventListener("drawer:opened", probe, true);
+  document.addEventListener("drawer:closed", probe, true);
+
+  // Keep it updating periodically as before
+  setInterval(probe, 400);
+})();
+</script>
 
 <!-- Right scroll probe (iOS-robust) -->
 <script>
