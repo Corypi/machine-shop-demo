@@ -143,7 +143,6 @@
   <script src="../Scripts/TabBar.js" defer></script>
 
   <!-- Left debug probe (kept for diagnostics) -->
-<!-- Left debug probe (replaced: works for any currently-open drawer) -->
 <script>
 (function(){
   "use strict";
@@ -205,13 +204,12 @@
 
     lines.push("=== Left Probe ===");
     lines.push("drawer: " + (drawer ? drawer.id : "—"));
-    lines.push("");
 
     // Title vs TabBar for snap verification
     if (tr){
       lines.push("title top: " + num(tr.top) + "px");
       lines.push("title vs bar: " + num(tr.top - barBtm) + "px");
-      lines.push("");
+      
     }
 
     // Content block metrics
@@ -227,7 +225,7 @@
 
     // Drawer state
     var isOpen = !!(drawer && drawer.classList.contains("Drawer--Open"));
-    lines.push("");
+    
     lines.push("isOpen: " + isOpen);
 
     box.textContent = lines.join("\n");
