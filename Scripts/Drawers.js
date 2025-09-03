@@ -63,47 +63,50 @@
     }
   };
 
-  // Snap under the TabBar; compute using offsetTop and do a double tick
-  DrawerController.prototype._snapUnderTabs = function(drawer){
-    if (!drawer) return;
-    var title = drawer.querySelector("[data-drawer-summary]") || drawer;
-    var y = title.offsetTop - this._tabBarHeight();
-    window.scrollTo({ top: y, behavior: "auto" });
-    requestAnimationFrame(function(){
-      window.scrollTo({ top: y, behavior: "auto" });
-    });
-  };
+// Snap under the TabBar using absolute document Y (no offsetTop pitfalls)
+DrawerController.prototype._snapUnderTabs = function(drawer){
+  if (!drawer) return;
+  var title = drawer.querySelector("[data-drawer-summary]") || drawer;
+  var rectTop = title.getBoundingClientRect().top;
+  var targetY = rectTop + (window.pageYOffset || document.documentElement.scrollTop || 0) - this._tabBarHeight();
 
-  // Wait until TabBar is visible and Container padding-top is applied (prevents early snap)
-  DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
-    var self = this, tries = 0, maxTries = 60;
+  // do it twice to absorb late layout (fonts/video/media)
+  window.scrollTo({ top: targetY, behavior: "auto" });
+  requestAnimationFrame(function(){
+    window.scrollTo({ top: targetY, behavior: "auto" });
+  });
+};
 
-    function ready(){
-      if (!document.body.classList.contains("Tabs--Visible")) return false;
-      var bar = self._tabBarEl();
-      if (!bar) return false;
-      var h = bar.getBoundingClientRect().height || 0;
-      if (h < 1) return false;
+// Wait until TabBar is visible and Container padding-top is applied, then snap
+DrawerController.prototype._snapUnderTabsDeferred = function(drawer){
+  var self = this, tries = 0, maxTries = 60;
 
-      var container = document.querySelector(".Container");
-      if (!container) return true;
-      var pt = parseFloat(getComputedStyle(container).paddingTop) || 0;
-      return pt >= h - 1;
+  function ready(){
+    if (!document.body.classList.contains("Tabs--Visible")) return false;
+    var bar = self._tabBarEl();
+    if (!bar) return false;
+    var h = bar.getBoundingClientRect().height || 0;
+    if (h < 1) return false;
+
+    var container = document.querySelector(".Container");
+    if (!container) return true;
+    var pt = parseFloat(getComputedStyle(container).paddingTop) || 0;
+    return pt >= h - 1;
+  }
+
+  (function loop(){
+    if (ready()){
+      // one more style tick then snap
+      requestAnimationFrame(function(){ self._snapUnderTabs(drawer); });
+      return;
     }
-
-    (function loop(){
-      if (ready()){
-        void document.body.offsetHeight; // force style tick
-        self._snapUnderTabs(drawer);
-        return;
-      }
-      if (++tries >= maxTries){
-        self._snapUnderTabs(drawer); // best effort
-        return;
-      }
-      requestAnimationFrame(loop);
-    })();
-  };
+    if (++tries >= maxTries){
+      self._snapUnderTabs(drawer); // best effort fallback
+      return;
+    }
+    requestAnimationFrame(loop);
+  })();
+};
 
   // Instantly remove a drawer from layout (no animation)
   DrawerController.prototype._forceRemoveFromFlow = function(drawer){
